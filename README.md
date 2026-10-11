@@ -82,12 +82,14 @@ your history back:
 The extension isn't on the Chrome Web Store, so you load it yourself. It takes about a
 minute and is the same on Windows and Mac.
 
-1. **Download it.** On this page click the green **Code** button → **Download ZIP**.
-   (Or, if you use git: `git clone https://github.com/saigonosenpai/meet-transcripts.git`.)
+1. **Download it.** Go to the [latest release](https://github.com/saigonosenpai/google-meet-transcripts-chrome-extension/releases/latest) and, under
+   **Assets**, download `meet-transcripts-vX.Y.Z.zip`.
+   (Or, if you use git: `git clone https://github.com/saigonosenpai/google-meet-transcripts-chrome-extension.git`.)
 2. **Unzip it somewhere permanent**, for example `Documents\meet-transcripts` (Windows) or
    `~/Documents/meet-transcripts` (Mac). Chrome runs the extension from this folder, so
    don't leave it in Downloads where it might get cleaned up, and don't delete it later.
-   Make sure the folder you'll pick is the one that directly contains `manifest.json`.
+   The ZIP holds a `meet-transcripts` folder; that's the one to pick in step 5 (it directly
+   contains `manifest.json`).
 3. Open **`chrome://extensions`** in the address bar (Edge: `edge://extensions`).
 4. Turn on **Developer mode** (the switch in the top-right corner).
 5. Click **Load unpacked** and select the folder from step 2.
@@ -105,11 +107,13 @@ Otherwise just join a Meet call.
 
 **The short version: replace the files, click reload. Don't click Remove.**
 
-1. Download the new version (**Code → Download ZIP**, or `git pull` if you cloned it).
+1. Download the new version's ZIP from the [latest release](https://github.com/saigonosenpai/google-meet-transcripts-chrome-extension/releases/latest), or run
+   `git pull` if you cloned it. To hear about new versions, click **Watch → Custom →
+   Releases** at the top of this page.
 2. Copy the new files **over your existing folder**, the one you loaded in step 5 of
    Install, replacing everything. On Windows, open the ZIP, select all, and paste into the
    folder choosing *Replace the files in the destination*. On Mac, unzip and drag the
-   contents into the folder choosing *Replace*.
+   contents of the new `meet-transcripts` folder into yours, choosing *Replace*.
 3. Open `chrome://extensions` and click the **reload arrow (↻)** on Meet Transcripts.
 4. Reload any open Google Meet tabs.
 
