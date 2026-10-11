@@ -25,6 +25,28 @@
     <label class="name">Your name <input type="text" id="myName" placeholder="replaces “You”"></label>
   </section>
 
+  <section class="card drive">
+    <div class="row"><svg class="gicon" viewBox="0 0 24 24" aria-hidden="true"><path fill="#4285f4" d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path fill="#a1c2fa" d="M14 2v6h6z"/><path fill="#fff" d="M8 12h8v1.5H8zm0 3h8v1.5H8zm0 3h5v1.5H8z"/></svg>
+      <strong>Google Docs</strong><span id="driveState" class="pill"></span></div>
+    <label><input type="checkbox" id="driveEnabled"> Save each call as a Doc in Drive</label>
+    <p class="muted small">Named <code>Date - Event - Participants</code>, in a “Meet Transcripts” folder.</p>
+    <div class="actions">
+      <button id="connect">Connect Google Drive</button>
+      <button id="disconnect" hidden>Disconnect</button>
+    </div>
+    <p id="driveMsg" class="muted small"></p>
+    <details id="setup">
+      <summary>Setup (one time)</summary>
+      <ol class="small">
+        <li>In Google Cloud Console, enable the <b>Google Drive API</b>.</li>
+        <li>Create an OAuth client ID of type <b>Web application</b> with this redirect URI:
+          <input id="redirect" readonly></li>
+        <li>Paste the client ID here:</li>
+      </ol>
+      <input type="text" id="clientId" placeholder="xxxx.apps.googleusercontent.com">
+    </details>
+  </section>
+
   <button id="openViewer" class="primary">All transcripts</button>
 
   <script src="shared.js"></script>

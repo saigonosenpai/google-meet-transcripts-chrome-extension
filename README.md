@@ -1,10 +1,25 @@
 # Meet Transcripts
 
-A Chrome extension that records your Google Meet calls as text transcripts, so you can
-read, search and summarize them later.
+A Chrome extension that records your Google Meet calls as text transcripts and saves each
+call as a **Google Doc** in your Drive, so you can read, search and reference them later.
 
-It works from Meet's own **live captions**, so there is no audio recording, no server and
-no API key. Transcripts are saved only in your browser (`chrome.storage.local`).
+It works from Meet's own **live captions**, so there is no audio recording and no server.
+Transcripts are kept in your browser and, once you connect Google Drive, also saved as one
+Doc per call:
+
+```
+Meet Transcripts/                                        (folder in your Drive)
+  2026-10-11 - Weekly sync - Alice, Bob, Carol, Sam
+  2026-10-12 - Design review - Dana, Eli, Sam +3
+```
+
+The name is `Date - Event name - Participants`. The event name is the Meet / Calendar event
+title (rename it in the transcript viewer and the Doc follows). Participants are everyone
+seen in the call plus everyone who spoke; more than four are shortened to `+N`.
+
+Each Doc has the date, duration, participants and meeting link, speaking time per person,
+highlights (possible action items, decisions and questions), and the full transcript with
+timestamps.
 
 ## Install
 
@@ -12,6 +27,35 @@ no API key. Transcripts are saved only in your browser (`chrome.storage.local`).
 2. Open `chrome://extensions` and turn on **Developer mode** (top right).
 3. Click **Load unpacked** and pick this folder.
 4. Pin the extension so you can see its badge.
+
+The extension's ID is always `kddloncdbcaidcdjcjpehapfbgnmicne` (the manifest has a fixed
+`key`), which the Google setup below relies on.
+
+## Connect Google Drive (one time, ~5 minutes)
+
+Google requires every app that writes to Drive to have its own OAuth client, so you
+create one in your Google Cloud account:
+
+1. Go to [console.cloud.google.com](https://console.cloud.google.com/), create a project
+   (any name), then **APIs & Services → Library → Google Drive API → Enable**.
+2. **APIs & Services → OAuth consent screen**: choose *External* (or *Internal* on a
+   Google Workspace account), fill in the app name and your email. Under *Test users* add
+   the Google account you'll save transcripts to.
+3. **APIs & Services → Credentials → Create credentials → OAuth client ID**:
+   - Application type: **Web application**
+   - Authorized redirect URI: `https://kddloncdbcaidcdjcjpehapfbgnmicne.chromiumapp.org/`
+     (also shown in the popup under *Setup*)
+4. Copy the client ID, open the extension popup, paste it under **Google Docs → Setup**,
+   and click **Connect Google Drive**.
+
+The extension only asks for the `drive.file` permission: it can see and edit the files it
+creates, and nothing else in your Drive.
+
+**When Docs are saved:** when you leave the call or close the tab, and also after 2
+minutes without new captions (so a crashed browser loses little). If the call carries on,
+the same Doc is updated rather than duplicated. You can also click **Save to Google Docs /
+Update Doc** on any transcript in the viewer, including ones recorded before you connected
+Drive. Deleting a transcript in the extension leaves its Doc in Drive.
 
 ## Use it
 
@@ -28,7 +72,9 @@ Click the icon to pause/resume, open the live transcript, or change settings:
 
 - **Turn on captions automatically**: clicks Meet's caption button when you join.
 - **Hide the caption overlay**: keeps recording but makes the captions on screen invisible.
-- **Your name**: Meet labels your own speech "You"; this replaces it with your name.
+- **Your name**: Meet labels your own speech "You"; this replaces it with your name, in
+  the transcript and in Doc names.
+- **Save each call as a Doc in Drive**: turn automatic Drive saving on or off.
 
 ### Reading transcripts
 
@@ -42,6 +88,7 @@ Click the icon to pause/resume, open the live transcript, or change settings:
 - **Copy for AI summary** copies the transcript with a prompt asking for a summary, key
   points, action items and open questions. Paste it into any AI chat.
 - Export as Markdown, plain text or JSON. Click the title to rename the meeting.
+- The Google Doc link, when it was last saved, and any save error appear under the title.
 
 The transcript page updates live while the meeting is still being recorded.
 
@@ -66,16 +113,18 @@ No build step: plain Manifest V3 JavaScript.
 |------|--------------|
 | `content.js` | Runs on meet.google.com; watches the caption panel and saves entries |
 | `shared.js` | Storage layout, grouping and export helpers (used everywhere) |
-| `background.js` | Toolbar badge per tab |
+| `background.js` | Toolbar badge, Google sign-in, and saving Docs to Drive |
 | `popup.*` | Toolbar popup |
 | `viewer.*` | Transcript library and reader |
 
 `test/e2e.mjs` loads the extension in Chromium with Playwright, serves
 `test/mock-meet.html` (a page that imitates Meet's caption DOM, including in-place
-revisions and Meet trimming the front of long captions) at a meet.google.com URL, and
-checks what got stored:
+revisions, Meet trimming the front of long captions, participant tiles and leaving the
+call) at a meet.google.com URL, fakes Google sign-in and the Drive API, and checks the
+stored transcript, the Doc's name, folder and content, and that later saves update the
+same Doc:
 
 ```bash
 npm i -D playwright   # or use a global install
-node test/e2e.mjs . /tmp   # screenshots land in /tmp
+node test/e2e.mjs . /tmp   # screenshots and the Doc's HTML land in /tmp
 ```

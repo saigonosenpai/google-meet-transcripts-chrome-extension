@@ -23,3 +23,15 @@ button.primary:hover { background: #1765cc; }
 .settings label:last-child { margin-bottom: 0; }
 .settings .name { justify-content: space-between; cursor: default; }
 .settings input[type=text] { flex: 1; max-width: 170px; padding: 5px 8px; border: 1px solid #dadce0; border-radius: 6px; font: inherit; }
+.small { font-size: 12px; }
+.drive .gicon { width: 18px; height: 18px; }
+.drive label { display: flex; align-items: center; gap: 8px; margin: 10px 0 2px; cursor: pointer; }
+.drive code { font-size: 11px; background: #f1f3f4; padding: 1px 4px; border-radius: 4px; }
+.pill { margin-left: auto; font-size: 11px; padding: 2px 8px; border-radius: 999px; background: #f1f3f4; color: #5f6368; }
+.pill.ok { background: #e6f4ea; color: #137333; }
+#driveMsg.err { color: #d93025; }
+details { margin-top: 8px; }
+summary { cursor: pointer; color: #1a73e8; font-size: 12px; }
+details ol { padding-left: 18px; margin: 8px 0; }
+details li { margin-bottom: 4px; }
+details input { width: 100%; padding: 5px 8px; border: 1px solid #dadce0; border-radius: 6px; font: 11px monospace; margin-top: 3px; }

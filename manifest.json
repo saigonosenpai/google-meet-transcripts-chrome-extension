@@ -1,21 +1,46 @@
 {
   "manifest_version": 3,
   "name": "Meet Transcripts",
-  "version": "1.0.0",
-  "description": "Records Google Meet live captions into searchable, exportable transcripts.",
-  "permissions": ["storage", "unlimitedStorage"],
-  "host_permissions": ["https://meet.google.com/*"],
-  "background": { "service_worker": "background.js" },
+  "version": "1.1.0",
+  "description": "Records Google Meet live captions and saves each call as a Google Doc in your Drive.",
+  "permissions": [
+    "storage",
+    "unlimitedStorage",
+    "identity",
+    "alarms"
+  ],
+  "host_permissions": [
+    "https://meet.google.com/*",
+    "https://www.googleapis.com/*"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
   "content_scripts": [
     {
-      "matches": ["https://meet.google.com/*"],
-      "js": ["shared.js", "content.js"],
+      "matches": [
+        "https://meet.google.com/*"
+      ],
+      "js": [
+        "shared.js",
+        "content.js"
+      ],
       "run_at": "document_idle"
     }
   ],
   "action": {
     "default_popup": "popup.html",
-    "default_icon": { "16": "icons/icon16.png", "32": "icons/icon32.png", "48": "icons/icon48.png" }
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "32": "icons/icon32.png",
+      "48": "icons/icon48.png"
+    }
   },
-  "icons": { "16": "icons/icon16.png", "32": "icons/icon32.png", "48": "icons/icon48.png", "128": "icons/icon128.png" }
+  "icons": {
+    "16": "icons/icon16.png",
+    "32": "icons/icon32.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  },
+  "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAocDT7WcZ6r9SrLUmIenyWHu1R6k03J9yH2yDgYdsgL9isYm1d46aBpFNu3LTjCHqYrQdO+AU4zQAEZrz42lxCYQ5mwXwaU3KvlbuTlhqyLKyfzNJo/Go9MCDP6AqgxzfFpPzdwbfyF1dpDcLFsxmQVaZZPSa+ZG3ehUJiy3eROoOB+3FV9BrdAabbyZPfuRbO4ozwYlSChSOXG7jwPJCrTc+8YbsBPj4NCtvvvpYCJi/LKt6vMXY+P/8C4W+VEJ4ZIWleiH82YIyYsNs43NOS3jFi1Sc3TEoJRkOScKqo8KZdJ+ZKyl9l8+k+fy6L9iExoLNTTh8lZQlL63zu3RH3wIDAQAB"
 }

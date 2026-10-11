@@ -3,6 +3,10 @@
 <body>
 <!-- Mimics Meet's caption DOM: one block per speaker turn, text revised in place. -->
 <button aria-label="Turn on captions (c)" aria-pressed="false" id="cc">CC</button>
+<div data-participant-id="p1"><div class="zWGUib">Alice</div></div>
+<div data-participant-id="p2"><div class="zWGUib">Bob</div></div>
+<div data-participant-id="p3"><div class="zWGUib">Carol</div></div>
+<div data-participant-id="p4"><div data-self-name="You" class="zWGUib">You</div></div>
 <script>
 let region = null;
 document.getElementById("cc").onclick = (e) => {
@@ -45,5 +49,9 @@ async function run() {
   document.title = "Meet - Weekly sync";
   window.done = true;
 }
+// Leaving the call: Meet swaps the call UI for a "You left the meeting" screen.
+window.leave = () => {
+  document.body.innerHTML = "<h1>You left the meeting</h1><button>Rejoin</button>";
+};
 </script>
 </body></html>

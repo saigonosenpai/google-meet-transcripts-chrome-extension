@@ -1,18 +1,6 @@
 const $ = (id) => document.getElementById(id);
 const COLORS = ["#1a73e8", "#d93025", "#188038", "#e37400", "#9334e6", "#007b83", "#c5221f", "#b06000"];
 
-const FILTERS = {
-  questions: { label: "questions", test: (s) => /\?\s*$/.test(s) },
-  actions: {
-    label: "possible action items",
-    test: (s) => /\b(action items?|follow[- ]?up|to-?do|next steps?|deadline|due|i'll|i will|we'll|we will|we need to|we should|you need to|can you|could you|let's|assign|owner|by (mon|tues|wednes|thurs|fri|satur|sun)day|by (tomorrow|tonight|eod|end of)|next week)\b/i.test(s),
-  },
-  decisions: {
-    label: "possible decisions",
-    test: (s) => /\b(decided|decision|agreed|agree|let's go with|we'll go with|going with|final(ize|ized)?|approved?|settled|conclusion)\b/i.test(s),
-  },
-};
-
 let meetings = [];
 let current = null;   // meeting meta
 let entries = [];
@@ -125,6 +113,31 @@ function renderMeeting() {
   }).join("");
 
   renderTranscript();
+  renderDrive();
+}
+
+async function renderDrive() {
+  const el = $("drive");
+  const d = await MT.getDrive(current.id);
+  const s = await MT.getSettings();
+  let html = "";
+  if (d && d.url) {
+    html += `<a href="${esc(d.url)}" target="_blank" rel="noopener">Open in Google Docs ↗</a>` +
+      `<span class="muted">Saved ${esc(new Date(d.syncedAt).toLocaleString())}</span>`;
+  } else {
+    html += `<span class="muted">${s.clientId ? "Not in Google Drive yet" : "Google Drive not set up (see the extension popup)"}</span>`;
+  }
+  if (s.clientId) html += `<button id="syncNow">${d && d.url ? "Update Doc" : "Save to Google Docs"}</button>`;
+  if (d && d.error) html += `<span class="err">${esc(d.error)}</span>`;
+  el.innerHTML = html;
+  const btn = $("syncNow");
+  if (btn) btn.addEventListener("click", async () => {
+    btn.disabled = true;
+    btn.textContent = "Saving…";
+    const r = await chrome.runtime.sendMessage({ type: "syncNow", id: current.id });
+    toast(r.ok ? "Saved to Google Docs" : "Couldn't save: " + r.error);
+    renderDrive();
+  });
 }
 
 function renderTranscript() {
@@ -135,18 +148,13 @@ function renderTranscript() {
     turns = MT.groupTurns(entries);
   } else {
     // Sentence-level filters: each matching sentence stands on its own.
-    const test = FILTERS[filter].test;
-    turns = [];
-    for (const e of entries) {
-      const hits = (e.text.match(/[^.?!]+[.?!]*/g) || []).map((s) => s.trim()).filter(test);
-      if (hits.length) turns.push({ speaker: e.speaker, ts: e.ts, lines: [{ text: hits.join(" … ") }] });
-    }
+    turns = MT.highlights(entries, filter).map((h) => ({ speaker: h.speaker, ts: h.ts, lines: [{ text: h.text }] }));
   }
   if (q) turns = turns.filter((t) => t.lines.some((l) => l.text.toLowerCase().includes(q)) || t.speaker.toLowerCase().includes(q));
 
   const note = $("filterNote");
   note.hidden = filter === "all" && !q;
-  note.textContent = `${turns.length} ${filter === "all" ? "matching turn" + (turns.length === 1 ? "" : "s") : FILTERS[filter].label}` +
+  note.textContent = `${turns.length} ${filter === "all" ? "matching turn" + (turns.length === 1 ? "" : "s") : MT.FILTERS[filter].label.toLowerCase()}` +
     (filter !== "all" ? " (found by keywords — skim for context)" : "");
 
   const recent = Date.now() - current.endedAt < 15_000;
@@ -167,11 +175,7 @@ function download(name, text, type) {
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
-function fileBase() {
-  const d = new Date(current.startedAt);
-  const date = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-  return `${date} ${current.title}`.replace(/[\\/:*?"<>|]+/g, "-").slice(0, 100);
-}
+const fileBase = () => MT.docName(current);
 
 async function copy(text, msg) {
   await navigator.clipboard.writeText(text);
@@ -244,6 +248,7 @@ chrome.storage.onChanged.addListener(async (changes) => {
     if (fresh) current = fresh;
     renderList();
   }
+  if (current && changes["d:" + current.id]) renderDrive();
   if (current && changes["t:" + current.id]) {
     entries = changes["t:" + current.id].newValue || [];
     const main = document.querySelector("main");

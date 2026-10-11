@@ -20,6 +20,11 @@
   const BLOCK_SEL = ".nMcdL, .TBMuR";
   const SPEAKER_SEL = ".NWpY1d, .zs7s8d, .KcIKyf";
   const TEXT_SEL = ".ygicle, .bh44bd, .iTTPOb";
+  // Participant names: video tiles, then the People panel.
+  const TILE_SEL = "[data-participant-id]";
+  const TILE_NAME_SEL = "[data-self-name], .zWGUib, .XEazBc, .dwSJ2e";
+  const PEOPLE_SEL = '[role="list"][aria-label*="articipant" i] [role="listitem"][aria-label]';
+  const ENDED_AFTER_TICKS = 3; // call UI gone this many polls in a row = user left the call
 
   let settings = null;
   let region = null;
@@ -35,6 +40,8 @@
   let lastAutoTry = 0;
   let lastStatus = "";
   let alive = true;
+  let participants = new Set();
+  let outOfCallTicks = 0;
 
   const meetingCode = () => (location.pathname.match(/^\/([a-z]{3,4}-[a-z]{4}-[a-z]{3,4})\b/) || [])[1] || null;
 
@@ -43,6 +50,20 @@
     let t = el ? el.getAttribute("data-meeting-title") : "";
     if (!t) t = document.title.replace(/^\s*(Google\s+)?Meet\s*[-–—:|]\s*/i, "").trim();
     return t && t !== code && !/^(google )?meet$/i.test(t) ? t : "Meet " + code;
+  }
+
+  function collectParticipants() {
+    const add = (name) => {
+      name = (name || "").split("\n")[0].trim();
+      if (!name || name.length > 60 || /^(you|unknown)$/i.test(name)) return;
+      participants.add(name);
+    };
+    for (const tile of document.querySelectorAll(TILE_SEL)) {
+      const el = tile.querySelector(TILE_NAME_SEL);
+      if (el) add(el.getAttribute("data-self-name") || el.textContent);
+    }
+    for (const item of document.querySelectorAll(PEOPLE_SEL)) add(item.getAttribute("aria-label"));
+    if (settings.myName) add(settings.myName);
   }
 
   // --- text stitching -------------------------------------------------------------------
@@ -180,22 +201,33 @@
     if (!session || !session.entries.length || !alive) return;
     const { meta, entries } = session;
     meta.title = meetingTitle();
+    meta.participants = [...participants];
     meta.endedAt = Math.max(meta.endedAt || 0, entries[entries.length - 1].ts);
     try {
       await MT.saveMeeting(meta, entries.filter((e) => e.text));
+      chrome.runtime.sendMessage({ type: "meetingSaved", id: meta.id });
     } catch (err) {
       if (String(err).includes("context invalidated")) shutdown();
       else console.warn("[Meet Transcripts] save failed", err);
     }
   }
 
+  async function endSession() {
+    if (!session) return;
+    const id = session.meta.id; // resetSession clears `session` while we save
+    await save();
+    try { chrome.runtime.sendMessage({ type: "meetingEnded", id }); } catch {}
+  }
+
   function resetSession() {
-    save();
+    endSession();
     session = null;
     sessionPromise = null;
     blocks = new WeakMap();
     captionsSeen = false;
     autoTries = 0;
+    participants = new Set();
+    outOfCallTicks = 0;
   }
 
   // --- page integration -----------------------------------------------------------------
@@ -223,12 +255,13 @@
     region.style.pointerEvents = settings.hideCaptions ? "none" : "";
   }
 
+  const captionButtons = () =>
+    [...document.querySelectorAll("button[aria-label]")].filter((b) => /caption/i.test(b.getAttribute("aria-label")));
+
   function tryEnableCaptions() {
     if (!settings.autoCaptions || captionsSeen || autoTries >= 5 || Date.now() - lastAutoTry < 4000) return;
-    const btn = [...document.querySelectorAll("button[aria-label]")].find((b) => {
-      const label = b.getAttribute("aria-label");
-      return /caption/i.test(label) && (/turn on|show/i.test(label) || b.getAttribute("aria-pressed") === "false");
-    });
+    const btn = captionButtons().find((b) =>
+      /turn on|show/i.test(b.getAttribute("aria-label")) || b.getAttribute("aria-pressed") === "false");
     if (!btn) return;
     lastAutoTry = Date.now();
     autoTries++;
@@ -266,6 +299,11 @@
       const el = document.querySelector(REGION_SEL);
       if (el !== region) attach(el);
       if (!region) tryEnableCaptions();
+      collectParticipants();
+      // The caption button only exists inside a call; once it is gone the user has left.
+      const inCall = !!region || captionButtons().length > 0;
+      outOfCallTicks = inCall ? 0 : outOfCallTicks + 1;
+      if (outOfCallTicks === ENDED_AFTER_TICKS) endSession();
     }
     sendStatus();
   }
