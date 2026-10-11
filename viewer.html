@@ -1,0 +1,58 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Meet Transcripts</title>
+  <link rel="icon" href="icons/icon32.png">
+  <link rel="stylesheet" href="viewer.css">
+</head>
+<body>
+  <aside>
+    <div class="brand"><img src="icons/icon32.png" alt=""> Meet Transcripts</div>
+    <input id="libSearch" type="search" placeholder="Search all meetings">
+    <ul id="list"></ul>
+    <p id="emptyLib" class="empty" hidden>No transcripts yet. Join a Google Meet call with captions on and it will show up here.</p>
+  </aside>
+
+  <main>
+    <div id="placeholder" class="empty big">Pick a meeting on the left.</div>
+    <article id="meeting" hidden>
+      <header>
+        <h1 id="title" contenteditable="plaintext-only" spellcheck="false" title="Click to rename"></h1>
+        <p id="meta" class="muted"></p>
+        <div id="speakers" class="speakers"></div>
+      </header>
+
+      <div class="toolbar">
+        <input id="search" type="search" placeholder="Find in transcript">
+        <div class="chips" id="filters">
+          <button data-filter="all" class="on">Everything</button>
+          <button data-filter="questions">Questions</button>
+          <button data-filter="actions">Action items</button>
+          <button data-filter="decisions">Decisions</button>
+        </div>
+        <div class="spacer"></div>
+        <button id="copyAI" title="Copies the transcript with a summarization prompt for any AI chat">Copy for AI summary</button>
+        <div class="menu">
+          <button id="exportBtn">Export ▾</button>
+          <div id="exportMenu" class="menu-list" hidden>
+            <button data-export="md">Markdown (.md)</button>
+            <button data-export="txt">Plain text (.txt)</button>
+            <button data-export="json">JSON (.json)</button>
+            <button data-export="copy">Copy text</button>
+          </div>
+        </div>
+        <button id="delete" class="danger" title="Delete this transcript">Delete</button>
+      </div>
+
+      <p id="filterNote" class="muted" hidden></p>
+      <div id="transcript"></div>
+    </article>
+  </main>
+
+  <div id="toast" hidden></div>
+  <script src="shared.js"></script>
+  <script src="viewer.js"></script>
+</body>
+</html>

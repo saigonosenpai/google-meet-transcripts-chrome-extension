@@ -1,0 +1,49 @@
+<!doctype html>
+<html><head><title>Meet - Weekly sync</title></head>
+<body>
+<!-- Mimics Meet's caption DOM: one block per speaker turn, text revised in place. -->
+<button aria-label="Turn on captions (c)" aria-pressed="false" id="cc">CC</button>
+<script>
+let region = null;
+document.getElementById("cc").onclick = (e) => {
+  e.target.setAttribute("aria-pressed", "true");
+  e.target.setAttribute("aria-label", "Turn off captions (c)");
+  region = document.createElement("div");
+  region.setAttribute("role", "region");
+  region.setAttribute("aria-label", "Captions");
+  document.body.append(region);
+  run();
+};
+const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+function block(name) {
+  const b = document.createElement("div");
+  b.className = "nMcdL";
+  b.innerHTML = '<div class="adE6rb"><img><div class="KcIKyf"><span class="NWpY1d"></span></div></div><div class="ygicle"></div>';
+  b.querySelector(".NWpY1d").textContent = name;
+  region.append(b);
+  return b.querySelector(".ygicle");
+}
+async function run() {
+  let t = block("Alice");
+  for (const s of ["so", "so the", "so the launch", "So the launch is next", "So the launch is next Friday.",
+                   "So the launch is next Friday. Can you send the deck by Thursday?"]) { t.textContent = s; await wait(120); }
+  t = block("You");
+  for (const s of ["yes", "Yes, I will send it.", "Yes, I will send it. We agreed to go with option B."]) { t.textContent = s; await wait(120); }
+  // Long monologue whose front gets trimmed by Meet.
+  t = block("Bob");
+  let full = "";
+  for (let i = 1; i <= 30; i++) {
+    full += `Sentence number ${i} talks about the roadmap in detail. `;
+    const shown = full.length > 500 ? full.slice(full.length - 500).replace(/^\S*\s/, "") : full;
+    t.textContent = shown.trim();
+    await wait(80);
+  }
+  await wait(300);
+  region.firstElementChild.remove(); // old blocks scroll away
+  t = block("Alice");
+  t.textContent = "Great, thanks everyone.";
+  document.title = "Meet - Weekly sync";
+  window.done = true;
+}
+</script>
+</body></html>
