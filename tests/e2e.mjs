@@ -1,6 +1,6 @@
 // End-to-end test: loads the extension in Chromium, serves a fake Meet call, and checks
 // the stored transcript and the .docx file it saves to Downloads/Meet Transcripts.
-//   node test/e2e.mjs <extension dir> <screenshot dir>
+//   node tests/e2e.mjs [extension dir] [screenshot dir]
 import path from "node:path";
 import fs from "node:fs";
 import os from "node:os";
@@ -10,9 +10,9 @@ import assert from "node:assert/strict";
 
 import { chromium } from "playwright";
 
-const ext = path.resolve(process.argv[2] || ".");
+const ext = path.resolve(process.argv[2] || new URL("../extension", import.meta.url).pathname);
 const shots = process.argv[3] || ".";
-const mock = fs.readFileSync(new URL("./mock-meet.html", import.meta.url), "utf8");
+const mock = fs.readFileSync(new URL("./fixtures/mock-meet.html", import.meta.url), "utf8");
 // Launch Chromium ourselves and attach over CDP: Playwright's own launch intercepts
 // downloads and renames them, and we want to see the files exactly as Chrome saves them.
 async function launch({ askWhereToSave = false } = {}) {
@@ -46,7 +46,7 @@ const key = Buffer.from(JSON.parse(fs.readFileSync(path.join(ext, "manifest.json
 const id = [...createHash("sha256").update(key).digest("hex").slice(0, 32)]
   .map((c) => String.fromCharCode(97 + parseInt(c, 16))).join("");
 const sw = await ctx.newPage();
-await sw.goto(`chrome-extension://${id}/viewer.html`);
+await sw.goto(`chrome-extension://${id}/viewer/viewer.html`);
 const today = new Date(); const pad = (n) => String(n).padStart(2, "0");
 const date = `${today.getFullYear()}-${pad(today.getMonth() + 1)}-${pad(today.getDate())}`;
 const dayDir = path.join(downloads, "Meet Transcripts", date);
@@ -84,7 +84,7 @@ fs.copyFileSync(file.filename, shots + "/saved.docx");
 // --- viewer: rename, save again -> one file, new name -----------------------------------------
 const v = await ctx.newPage();
 await v.setViewportSize({ width: 1200, height: 900 });
-await v.goto(`chrome-extension://${id}/viewer.html#` + encodeURIComponent(meta.id));
+await v.goto(`chrome-extension://${id}/viewer/viewer.html#` + encodeURIComponent(meta.id));
 await v.waitForSelector("#showFile");
 await v.click("#title");
 await v.keyboard.press("End");
@@ -119,7 +119,7 @@ console.log("delete + undo: restored");
 
 const p = await ctx.newPage();
 await p.setViewportSize({ width: 340, height: 600 });
-await p.goto(`chrome-extension://${id}/popup.html`);
+await p.goto(`chrome-extension://${id}/popup/popup.html`);
 await p.waitForTimeout(500);
 assert.ok((await p.textContent("#lastSaved")).includes("(Q4)"));
 await p.screenshot({ path: shots + "/popup.png" });
@@ -153,7 +153,7 @@ assert.equal(await sw.evaluate(() => MT.title({ title: "Meet xtk-wiod-gkq", spea
 assert.equal(await sw.evaluate(() => MT.title({ title: "Meet xtk-wiod-gkq", speakers: ["Ann", "You"] })), "Call with Ann");
 assert.equal(await sw.evaluate(() => MT.title({ title: "Weekly sync", speakers: ["Ann"] })), "Weekly sync");
 
-await v.goto(`chrome-extension://${id}/viewer.html#` + encodeURIComponent(call1.m.id));
+await v.goto(`chrome-extension://${id}/viewer/viewer.html#` + encodeURIComponent(call1.m.id));
 await v.waitForSelector("#showFile");
 await v.screenshot({ path: shots + "/viewer-list.png" });
 
@@ -173,7 +173,7 @@ const linesBefore = await v.evaluate(async () => Object.fromEntries(await Promis
   (await MT.listMeetings()).map(async (m) => [MT.title(m), (await MT.getTranscript(m.id)).length]))));
 await v.evaluate(() => chrome.storage.local.clear()); // what removing the extension does
 await v.goto("about:blank");
-await v.goto(`chrome-extension://${id}/viewer.html#welcome`);
+await v.goto(`chrome-extension://${id}/viewer/viewer.html#welcome`);
 await v.waitForSelector("#emptyLib:not([hidden])");
 assert.ok(await v.$("#importBtn.pulse"), "restore button highlighted on a fresh library");
 // What picking the folder hands the page: every file in it, day folders included.
@@ -208,15 +208,15 @@ await close();
 {
   const run = await launch({ askWhereToSave: true });
   const v = await run.ctx.newPage();
-  await v.goto(`chrome-extension://${id}/viewer.html`);
+  await v.goto(`chrome-extension://${id}/viewer/viewer.html`);
   await v.evaluate((m) => chrome.storage.local.set({ meetings: { [m.id]: m }, ["t:" + m.id]: [{ speaker: "Ann", text: "Hello.", ts: m.startedAt }] }),
     { id: "x-1", code: "abc-defg-hij", title: "Ask test", startedAt: Date.now(), endedAt: Date.now(), speakers: ["Ann"] });
-  await v.goto(`chrome-extension://${id}/viewer.html#x-1`);
+  await v.goto(`chrome-extension://${id}/viewer/viewer.html#x-1`);
   await v.click("#saveNow");
   await v.waitForSelector("#dlSettings", { timeout: 15000 });
   console.log("ask-where-to-save warning:", (await v.textContent("#file .err")).slice(0, 70) + "…");
   const p = await run.ctx.newPage();
-  await p.goto(`chrome-extension://${id}/popup.html`);
+  await p.goto(`chrome-extension://${id}/popup/popup.html`);
   await p.waitForSelector("#askWarning:not([hidden])");
   await run.close();
 }

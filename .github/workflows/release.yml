@@ -1,5 +1,5 @@
 # Publishes a GitHub release whenever main carries a manifest version that hasn't been released yet.
-# To ship an update: bump "version" in manifest.json, add a "## <version>" section to CHANGELOG.md, push.
+# To ship an update: bump "version" in extension/manifest.json, add a "## <version>" section to CHANGELOG.md, push.
 name: Release
 
 on:
@@ -25,7 +25,7 @@ jobs:
       - name: Check whether this version is already released
         id: version
         run: |
-          version=$(jq -r .version manifest.json)
+          version=$(jq -r .version extension/manifest.json)
           echo "version=$version" >> "$GITHUB_OUTPUT"
           tagged=$(git rev-list -n 1 "v$version" 2> /dev/null || true)
           if gh release view "v$version" > /dev/null 2>&1 && [ -n "$tagged" ] && git merge-base --is-ancestor "$tagged" HEAD; then
@@ -50,13 +50,14 @@ jobs:
         run: |
           npm install --no-save playwright
           npx playwright install --with-deps chromium
-          node test/e2e.mjs . "$RUNNER_TEMP"
+          node tests/e2e.mjs extension "$RUNNER_TEMP"
 
       - name: Build the extension zip
         if: steps.version.outputs.new == 'true'
         run: |
           mkdir -p dist/meet-transcripts
-          cp -r manifest.json *.js *.html *.css icons LICENSE README.md dist/meet-transcripts/
+          cp -r extension/. dist/meet-transcripts/
+          cp LICENSE README.md dist/meet-transcripts/
           cd dist && zip -qr "meet-transcripts-v${{ steps.version.outputs.version }}.zip" meet-transcripts
 
       - name: Write the release notes

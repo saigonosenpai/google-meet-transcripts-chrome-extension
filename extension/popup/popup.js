@@ -76,9 +76,9 @@ async function init() {
   });
   $("viewCurrent").addEventListener("click", async () => {
     try { await chrome.tabs.sendMessage(tab.id, { type: "flush" }); } catch {}
-    chrome.tabs.create({ url: "viewer.html#" + encodeURIComponent(current.meetingId) });
+    chrome.tabs.create({ url: chrome.runtime.getURL("viewer/viewer.html#" + encodeURIComponent(current.meetingId)) });
   });
-  $("openViewer").addEventListener("click", () => chrome.tabs.create({ url: "viewer.html" }));
+  $("openViewer").addEventListener("click", () => chrome.tabs.create({ url: chrome.runtime.getURL("viewer/viewer.html") }));
 
   $("autoSave").checked = s.autoSave;
   $("autoSave").addEventListener("change", (e) => MT.saveSettings({ autoSave: e.target.checked }));

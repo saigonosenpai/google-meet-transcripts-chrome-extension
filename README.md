@@ -11,7 +11,7 @@ no servers: everything stays on your computer.
 Works on **Windows and macOS** (and Linux) in Chrome, Edge, Brave, Arc and other
 Chromium browsers.
 
-![The transcript library: meetings by day on the left, the full transcript with speakers and timestamps on the right](docs/viewer.png)
+![The transcript library: meetings by day on the left, the full transcript with speakers and timestamps on the right](docs/screenshots/viewer.png)
 
 ---
 
@@ -54,28 +54,28 @@ Chromium browsers.
 
 | The toolbar popup | Dark mode |
 |---|---|
-| ![The popup: recording status, settings switches and the All Transcripts button](docs/popup.png) | ![The popup in dark mode](docs/popup-dark.png) |
+| ![The popup: recording status, settings switches and the All Transcripts button](docs/screenshots/popup.png) | ![The popup in dark mode](docs/screenshots/popup-dark.png) |
 
 **Action items, decisions and questions** pulled out of the transcript with one click:
 
-![The Action items filter showing only the sentences that sound like tasks](docs/action-items.png)
+![The Action items filter showing only the sentences that sound like tasks](docs/screenshots/action-items.png)
 
 **Export** to Word, Markdown, plain text or JSON, or copy it:
 
-![The Export menu open under the Export button](docs/export.png)
+![The Export menu open under the Export button](docs/screenshots/export.png)
 
 **The saved Word document** (first page). The full transcript follows the highlights:
 
-![Page one of a saved .docx: title, date, participants, speaking time and highlights](docs/docx.png)
+![Page one of a saved .docx: title, date, participants, speaking time and highlights](docs/screenshots/docx.png)
 
 **Dark mode** follows your system setting:
 
-![The transcript library in dark mode](docs/viewer-dark.png)
+![The transcript library in dark mode](docs/screenshots/viewer-dark.png)
 
 **After a reinstall** the library opens itself and points you to the one click that brings
 your history back:
 
-![The empty library after a reinstall, with the Restore from folder button highlighted](docs/restore.png)
+![The empty library after a reinstall, with the Restore from folder button highlighted](docs/screenshots/restore.png)
 
 ## Install
 
@@ -84,7 +84,8 @@ minute and is the same on Windows and Mac.
 
 1. **Download it.** Go to the [latest release](https://github.com/saigonosenpai/google-meet-transcripts-chrome-extension/releases/latest) and, under
    **Assets**, download `meet-transcripts-vX.Y.Z.zip`.
-   (Or, if you use git: `git clone https://github.com/saigonosenpai/google-meet-transcripts-chrome-extension.git`.)
+   (Or, if you use git: `git clone https://github.com/saigonosenpai/google-meet-transcripts-chrome-extension.git`;
+   then load its `extension` folder in step 5.)
 2. **Unzip it somewhere permanent**, for example `Documents\meet-transcripts` (Windows) or
    `~/Documents/meet-transcripts` (Mac). Chrome runs the extension from this folder, so
    don't leave it in Downloads where it might get cleaned up, and don't delete it later.
@@ -321,38 +322,49 @@ What changed in each version is in [CHANGELOG.md](CHANGELOG.md) and on the
 
 No build step and no dependencies: plain Manifest V3 JavaScript. The manifest has a fixed
 `key`, so the extension ID (`kddloncdbcaidcdjcjpehapfbgnmicne`) and its stored data stay
-the same wherever the folder lives.
+the same wherever the folder lives. If you cloned the repo, load the **`extension`** folder
+with **Load unpacked**.
 
-| File | What it does |
-|------|--------------|
-| `content.js` | Runs on meet.google.com; watches the caption panel, participants and your name |
-| `shared.js` | Storage layout, grouping, file naming and the document layout |
-| `docx.js` | Tiny dependency-free `.docx` writer |
-| `docximport.js` | Reads saved `.docx` files and `library.json` back in, for Restore |
-| `background.js` | Toolbar badge; saving each call's `.docx` and `library.json` via `chrome.downloads` |
-| `popup.*` | Toolbar popup |
-| `viewer.*` | Transcript library and reader |
+```
+extension/                 the Chrome extension (this is what the release zip contains)
+  manifest.json
+  background.js            toolbar badge; saves each call's .docx and library.json
+  content.js               runs on meet.google.com; watches captions, participants, your name
+  lib/
+    shared.js              storage layout, grouping, file naming, the document layout
+    docx.js                tiny dependency-free .docx writer
+    docximport.js          reads saved .docx files and library.json back in, for Restore
+  popup/                   the toolbar popup
+  viewer/                  the transcript library and reader
+  icons/
+tests/
+  e2e.mjs                  end-to-end test in a real Chromium
+  fixtures/mock-meet.html  a page that imitates Google Meet
+docs/screenshots/          images used in this README
+.github/workflows/         automatic releases
+CHANGELOG.md               what changed in each version (becomes the release notes)
+```
 
-`test/e2e.mjs` launches Chromium with the extension and serves `test/mock-meet.html`, a page
-that imitates Meet's caption DOM (in-place revisions, Meet trimming long captions,
+`tests/e2e.mjs` launches Chromium with the extension and serves `tests/fixtures/mock-meet.html`,
+a page that imitates Meet's caption DOM (in-place revisions, Meet trimming long captions,
 participant tiles, leaving the call), at a meet.google.com URL. It checks the stored
 transcript, the `.docx` names and day folders in a real Downloads directory, renames,
 delete and undo, the "ask where to save" warning, and a full wipe-and-restore from
 `library.json`:
 
 ```bash
-npm i -D playwright      # or use a global install
-node test/e2e.mjs . /tmp # screenshots and a copy of the saved .docx land in /tmp
+npm i -D playwright                  # or use a global install
+node tests/e2e.mjs extension /tmp    # screenshots and a copy of the saved .docx land in /tmp
 ```
 
 ### Releasing
 
 Releases are automatic. `.github/workflows/release.yml` runs on every push to `main`: if the
-`version` in `manifest.json` has no release yet, it runs the end-to-end test, zips the
+`version` in `extension/manifest.json` has no release yet, it runs the end-to-end test, zips the
 extension (without tests and screenshots), and publishes release `v<version>` with that
 version's section of `CHANGELOG.md` as the notes. To ship an update:
 
-1. Bump `version` in `manifest.json` (e.g. `1.4.0` → `1.5.0`).
+1. Bump `version` in `extension/manifest.json` (e.g. `1.4.0` → `1.5.0`).
 2. Add a `## 1.5.0` section at the top of `CHANGELOG.md`.
 3. Push to `main`.
 

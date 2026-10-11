@@ -1,4 +1,4 @@
-importScripts("shared.js", "docx.js");
+importScripts("lib/shared.js", "lib/docx.js");
 
 // --- toolbar badge ------------------------------------------------------------------------
 
@@ -214,7 +214,7 @@ chrome.storage.local.get(["meetings", "libraryReady"]).then(({ meetings, library
 
 // After a fresh install, open the transcripts page so a previous library can be restored.
 chrome.runtime.onInstalled.addListener(({ reason }) => {
-  if (reason === "install") chrome.tabs.create({ url: "viewer.html#welcome" });
+  if (reason === "install") chrome.tabs.create({ url: chrome.runtime.getURL("viewer/viewer.html#welcome") });
   if (reason === "update") chrome.storage.local.set({ libraryReady: true });
 });
 
