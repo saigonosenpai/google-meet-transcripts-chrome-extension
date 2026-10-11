@@ -178,7 +178,8 @@ the call and the badge on the toolbar icon tell you what's happening:
 | `II` | ● Paused | Recording is paused. Click the pill to resume |
 
 Click the icon to **pause/resume** or open the **live transcript**, which updates as people
-talk.
+talk. Below that, the popup shows your library at a glance: how many calls, how much time
+they add up to, and how much space the documents and backup take on disk.
 
 ### When it saves
 

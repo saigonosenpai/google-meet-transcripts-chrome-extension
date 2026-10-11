@@ -3,6 +3,13 @@
 Each version here becomes a release on GitHub, with the extension zip attached, as soon as
 it's pushed to `main` with the matching `version` in `extension/manifest.json`.
 
+## 2.1.0
+
+- **Your library at a glance** in the popup: how many calls you've recorded, their total
+  length, and the space your Word documents and `library.json` take on disk, with a
+  Meet / Teams / Zoom breakdown and when the backup was last saved. Click *calls* to open
+  the library, or *on disk* to open the folder.
+
 ## 2.0.1
 
 - Captions are always turned on when you join a call: everything depends on them, so the

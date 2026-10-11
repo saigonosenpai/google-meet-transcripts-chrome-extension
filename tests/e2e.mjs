@@ -124,6 +124,13 @@ await p.setViewportSize({ width: 340, height: 600 });
 await p.goto(`chrome-extension://${id}/popup/popup.html`);
 await p.waitForTimeout(500);
 assert.ok((await p.textContent("#lastSaved")).includes("(Q4)"));
+// The library at a glance: one call, its document (and library.json) on disk.
+await p.waitForFunction(() => document.getElementById("size").textContent !== "–");
+const stats = await p.evaluate(() => ["calls", "recorded", "size", "statsDetail"].map((id) => document.getElementById(id).textContent));
+console.log("popup stats:", stats.join(" | "));
+assert.equal(stats[0], "1");
+assert.match(stats[2], /^\d+(\.\d)? (KB|MB)$/);
+assert.match(stats[3], /^Meet 1 · 1 Word document/);
 await p.screenshot({ path: shots + "/popup.png" });
 
 // --- spontaneous calls: named after who else joined ---------------------------------------------

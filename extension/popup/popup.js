@@ -71,6 +71,53 @@ async function renderFiles() {
   $("askWarning").hidden = !blocked;
 }
 
+// --- the library at a glance ---------------------------------------------------------------
+
+function bytes(n) {
+  if (n < 1024) return n + " B";
+  if (n < 1024 * 1024) return Math.round(n / 1024) + " KB";
+  return (n / 1024 / 1024).toFixed(n < 10 * 1024 * 1024 ? 1 : 0) + " MB";
+}
+
+function hours(ms) {
+  const mins = Math.round(ms / 60000);
+  if (mins < 1) return ms > 0 ? "<1 min" : "0 min";
+  if (mins < 60) return mins + " min";
+  return (mins / 60).toFixed(mins < 600 ? 1 : 0).replace(/\.0$/, "") + " h";
+}
+
+function ago(ts) {
+  const mins = Math.round((Date.now() - ts) / 60000);
+  if (mins < 1) return "just now";
+  if (mins < 60) return mins + " min ago";
+  if (mins < 60 * 24) return Math.round(mins / 60) + " h ago";
+  return new Date(ts).toLocaleDateString(undefined, { month: "short", day: "numeric" });
+}
+
+async function renderStats() {
+  const all = await chrome.storage.local.get(null);
+  const meetings = Object.values(all.meetings || {});
+  $("calls").textContent = meetings.length;
+  $("recorded").textContent = hours(meetings.reduce((t, m) => t + Math.max(0, (m.endedAt || m.startedAt) - m.startedAt), 0));
+
+  // What's actually on disk: the saved documents that still exist, plus library.json.
+  const ids = Object.entries(all).filter(([k, f]) => k.startsWith("f:") && f && f.downloadId).map(([, f]) => f.downloadId);
+  if (all.libraryDownloadId) ids.push(all.libraryDownloadId);
+  const items = (await Promise.all(ids.map((id) => chrome.downloads.search({ id }).catch(() => [])))).flat()
+    .filter((i) => i && i.exists && i.state === "complete");
+  $("size").textContent = bytes(items.reduce((t, i) => t + (i.fileSize > 0 ? i.fileSize : i.totalBytes > 0 ? i.totalBytes : 0), 0));
+  const docs = items.filter((i) => i.id !== all.libraryDownloadId).length;
+
+  const counts = Object.entries(MT.PLATFORMS)
+    .map(([id, p]) => [p.short, meetings.filter((m) => MT.platformOf(m) === id).length])
+    .filter(([, n]) => n).map(([name, n]) => `${name} ${n}`);
+  const parts = [];
+  if (counts.length) parts.push(counts.join(" · "));
+  parts.push(`${docs} Word document${docs === 1 ? "" : "s"}`);
+  if (all.librarySavedAt && items.some((i) => i.id === all.libraryDownloadId)) parts.push(`backup saved ${ago(all.librarySavedAt)}`);
+  $("statsDetail").textContent = meetings.length ? parts.join(" · ") + "." : "";
+}
+
 async function init() {
   const s = await MT.getSettings();
   $("hideCaptions").checked = s.hideCaptions;
@@ -111,7 +158,13 @@ async function init() {
     chrome.runtime.sendMessage({ type: "showFile", downloadId: f && f.downloadId });
   });
   $("dlSettings").addEventListener("click", () => chrome.runtime.sendMessage({ type: "openDownloadSettings" }));
+  $("statCalls").addEventListener("click", () => chrome.tabs.create({ url: chrome.runtime.getURL("viewer/viewer.html") }));
+  $("statSize").addEventListener("click", async () => {
+    const f = await latestFile();
+    chrome.runtime.sendMessage({ type: "showFile", downloadId: f && f.downloadId });
+  });
   renderFiles();
+  renderStats();
   await refresh();
   setInterval(refresh, 2000);
 }
