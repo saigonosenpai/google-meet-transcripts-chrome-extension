@@ -157,6 +157,8 @@ async function renderFile() {
     html += `<span class="doc" title="${esc(f.filename)}">${DOC_ICON}<span>Saved as <b>${esc(name)}</b></span></span>` +
       `<span class="sep">·</span><span>${esc(savedWhen(f.savedAt))}</span>` +
       `<button id="showFile" class="btn link">Show in folder</button>`;
+  } else if (current.importedFrom) {
+    html += `<span class="doc" title="${esc(current.importedFrom)}">${DOC_ICON}<span>Restored from <b>${esc(current.importedFrom)}</b></span></span>`;
   } else {
     html += `<span class="doc">${DOC_ICON}<span>Not saved as a Word document yet</span></span>`;
   }
@@ -313,6 +315,28 @@ function bindActions() {
     });
   });
 
+  // Rebuild meetings from saved .docx files (pick the "Meet Transcripts" folder, or files).
+  $("importBtn").addEventListener("click", () => { $("importBtn").classList.remove("pulse"); $("importInput").click(); });
+  $("importInput").addEventListener("change", async (e) => {
+    const picked = [...e.target.files];
+    e.target.value = "";
+    const btn = $("importBtn");
+    btn.disabled = true;
+    const result = await restoreFrom(picked, (text) => (btn.lastChild.textContent = ` ${text}`));
+    btn.disabled = false;
+    btn.lastChild.textContent = " Restore from folder…";
+    libIndex = null;
+    await loadLibrary();
+    toast(result);
+  });
+
+  $("startFresh").addEventListener("click", async () => {
+    await chrome.storage.local.set({ libraryReady: true });
+    $("importBtn").classList.remove("pulse");
+    $("welcomeChoice").hidden = true;
+    toast("Starting a new library");
+  });
+
   let libTimer;
   $("libSearch").addEventListener("input", async (e) => {
     libQuery = e.target.value.trim();
@@ -342,11 +366,74 @@ chrome.storage.onChanged.addListener(async (changes) => {
   }
 });
 
-window.addEventListener("hashchange", () => openMeeting(decodeURIComponent(location.hash.slice(1))));
+// Restores from the picked folder: library.json (everything, settings included), then any
+// .docx it doesn't cover (calls saved after the last library.json, or files from before it).
+async function restoreFrom(picked, progress) {
+  let added = 0, already = 0, failed = 0, settingsRestored = false;
+  const isKnown = (meta, title) => meetings.some((m) => m.id === meta.id ||
+    (Math.abs(m.startedAt - meta.startedAt) < 120_000 && MT.title(m) === title));
+
+  // library.json, and "library (since reinstall).json" from an install that wasn't restored.
+  const libs = [];
+  for (const f of picked.filter((f) => /^library.*\.json$/i.test(f.name))) {
+    const parsed = DOCX_IMPORT.parseLibrary(await f.text());
+    if (parsed) libs.push(parsed);
+  }
+  for (const lib of libs) {
+    progress("Restoring library…");
+    if (Object.keys(lib.settings).length) { await MT.saveSettings(lib.settings); settingsRestored = true; }
+    const store = {};
+    const { meetings: stored = {} } = await chrome.storage.local.get("meetings");
+    for (const m of lib.meetings) {
+      if (isKnown(m, MT.title(m))) { already++; continue; }
+      stored[m.id] = m;
+      store["t:" + m.id] = lib.transcripts[m.id];
+      if (lib.files[m.id]) store["f:" + m.id] = lib.files[m.id];
+      added++;
+    }
+    await chrome.storage.local.set({ ...store, meetings: stored });
+    meetings = await MT.listMeetings();
+  }
+
+  const docs = picked.filter((f) => /\.docx$/i.test(f.name) && !f.name.startsWith("~$"));
+  for (const [i, file] of docs.entries()) {
+    progress(`Reading ${i + 1} of ${docs.length}…`);
+    try {
+      const { meta, entries: lines } = await DOCX_IMPORT.parse(await file.arrayBuffer(), file.name);
+      if (isKnown(meta, MT.title({ ...meta, speakers: [] }))) { already++; continue; }
+      await MT.saveMeeting(meta, lines);
+      meetings = await MT.listMeetings();
+      added++;
+    } catch {
+      failed++;
+    }
+  }
+  if (!libs.length && !docs.length) return "No library.json or .docx files in that folder";
+  await chrome.storage.local.set({ libraryReady: true }); // from now on, keep library.json up to date
+  return [`Restored ${added} meeting${added === 1 ? "" : "s"}`, settingsRestored && "settings",
+    already && `${already} already here`, failed && `${failed} couldn't be read`].filter(Boolean).join(" · ");
+}
+
+// "#<meeting id>" opens a meeting; "#welcome" (after a fresh install) points at Restore.
+async function route() {
+  const id = decodeURIComponent(location.hash.slice(1));
+  if (id === "welcome") {
+    history.replaceState(null, "", location.pathname);
+    meetings = await MT.listMeetings();
+    const { libraryReady } = await chrome.storage.local.get("libraryReady");
+    const isFresh = !meetings.length && !libraryReady;
+    $("importBtn").classList.toggle("pulse", isFresh);
+    $("welcomeChoice").hidden = !isFresh;
+    renderList();
+    return openMeeting(null);
+  }
+  openMeeting(id || null);
+}
+
+window.addEventListener("hashchange", route);
 
 (async () => {
   bindActions();
   await loadLibrary();
-  const id = decodeURIComponent(location.hash.slice(1));
-  openMeeting(id || null);
+  route();
 })();

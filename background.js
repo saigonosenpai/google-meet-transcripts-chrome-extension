@@ -138,6 +138,86 @@ async function migrateFiles() {
 }
 migrateFiles();
 
+// --- library.json: the history, kept in the folder ---------------------------------------
+//
+// Downloads/Meet Transcripts/library.json holds every meeting (title, participants, every
+// line with speaker and time) and your settings, rewritten a few seconds after anything
+// changes. Removing the extension clears Chrome's copy; "Restore from folder…" in the
+// transcripts page reads this file (and the .docx files) back.
+//
+// A fresh install must not overwrite a good library.json with a nearly empty library: until
+// the history is restored (or you choose to start fresh, "libraryReady"), it writes
+// "library (since reinstall).json" instead. Restore reads both and then keeps one.
+
+const LIBRARY_FILE = FOLDER + "/library.json";
+const INTERIM_FILE = FOLDER + "/library (since reinstall).json";
+const BACKED_UP = ["autoCaptions", "hideCaptions", "myName", "autoSave"]; // not "paused": that's momentary
+let libraryTimer = null;
+
+async function writeLibraryFile() {
+  const all = await chrome.storage.local.get(null);
+  if (!all.libraryReady && !Object.keys(all.meetings || {}).length) return; // nothing to keep yet
+  const filename = all.libraryReady ? LIBRARY_FILE : INTERIM_FILE;
+  const idKey = all.libraryReady ? "libraryDownloadId" : "interimDownloadId";
+  const settings = Object.fromEntries(BACKED_UP.filter((k) => all.settings && k in all.settings).map((k) => [k, all.settings[k]]));
+  const transcripts = {}, files = {};
+  for (const [k, v] of Object.entries(all)) {
+    if (k.startsWith("t:")) transcripts[k.slice(2)] = v;
+    if (k.startsWith("f:")) files[k.slice(2)] = v;
+  }
+  const json = JSON.stringify({ app: "meet-transcripts", kind: "library", version: 1, savedAt: Date.now(),
+    settings, meetings: all.meetings || {}, transcripts, files });
+  const bytes = new TextEncoder().encode(json);
+  let bin = "";
+  for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+  await chrome.downloads.setUiOptions({ enabled: false }).catch(() => {});
+  try {
+    const id = await chrome.downloads.download({
+      url: "data:application/json;base64," + btoa(bin), filename, conflictAction: "overwrite", saveAs: false,
+    });
+    await waitForDownload(id);
+    if (all[idKey] && all[idKey] !== id) await chrome.downloads.erase({ id: all[idKey] }).catch(() => {});
+    await chrome.storage.local.set({ [idKey]: id, librarySavedAt: Date.now() });
+    // Once library.json holds everything, the interim file has served its purpose. Find it in
+    // Chrome's download history: an earlier install may have written it.
+    if (all.libraryReady) {
+      const stale = await chrome.downloads.search({ filenameRegex: "library \\(since reinstall\\)\\.json$", exists: true });
+      for (const item of stale) {
+        await chrome.downloads.removeFile(item.id).catch(() => {});
+        await chrome.downloads.erase({ id: item.id }).catch(() => {});
+      }
+      await chrome.storage.local.remove("interimDownloadId");
+    }
+  } catch {
+    // e.g. Chrome set to ask where to save each file; the .docx warning already covers that.
+  } finally {
+    await chrome.downloads.setUiOptions({ enabled: true }).catch(() => {});
+  }
+}
+
+const isHistoryKey = (k) => k === "meetings" || k === "settings" || k === "libraryReady" || k.startsWith("t:") || k.startsWith("f:");
+
+chrome.storage.onChanged.addListener((changes, area) => {
+  if (area !== "local" || !Object.keys(changes).some(isHistoryKey)) return;
+  if (changes.settings && !changes.meetings && !Object.keys(changes).some((k) => k.startsWith("t:"))) {
+    const before = changes.settings.oldValue || {}, after = changes.settings.newValue || {};
+    if (!BACKED_UP.some((k) => before[k] !== after[k])) return; // only "paused" moved
+  }
+  clearTimeout(libraryTimer);
+  libraryTimer = setTimeout(writeLibraryFile, 3000); // once things settle, not on every caption
+});
+
+// An existing library (an update, or a reload of this version) is ready to be written out.
+chrome.storage.local.get(["meetings", "libraryReady"]).then(({ meetings, libraryReady }) => {
+  if (libraryReady === undefined && meetings && Object.keys(meetings).length) chrome.storage.local.set({ libraryReady: true });
+});
+
+// After a fresh install, open the transcripts page so a previous library can be restored.
+chrome.runtime.onInstalled.addListener(({ reason }) => {
+  if (reason === "install") chrome.tabs.create({ url: "viewer.html#welcome" });
+  if (reason === "update") chrome.storage.local.set({ libraryReady: true });
+});
+
 chrome.alarms.onAlarm.addListener((alarm) => {
   if (alarm.name.startsWith("save:")) saveDoc(alarm.name.slice(5)).catch(() => {});
 });

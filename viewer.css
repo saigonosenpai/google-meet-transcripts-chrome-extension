@@ -241,3 +241,11 @@ mark { background: var(--hit); color: inherit; border-radius: 0.1875rem; padding
   article { padding: 1.5rem 1rem 4rem; }
   .toolbar { flex-wrap: wrap; margin: 1rem -1rem 0.5rem; padding: 0.5rem 1rem; }
 }
+
+/* Sidebar footer: importing saved Word files. */
+#list { flex: 1; }
+.sidebar-foot { padding: 0.75rem; border-top: 1px solid var(--separator); }
+.sidebar-foot .btn { width: 100%; justify-content: center; }
+.empty-state b { color: var(--label); font-weight: 600; }
+.empty-state .path { white-space: nowrap; }
+#importBtn.pulse { box-shadow: 0 0 0 3px var(--accent-soft); }

@@ -18,6 +18,16 @@
     <div id="emptyLib" class="empty-state" hidden>
       <strong>No transcripts yet</strong>
       Join a Google Meet call with captions on, and it shows up here as you talk.
+      Used it before? <b>Restore from folder</b> below and pick
+      <span class="path">Downloads › Meet Transcripts</span> to bring back your history and settings.
+      <span id="welcomeChoice" hidden><br><button id="startFresh" class="btn link">Start a new library instead</button></span>
+    </div>
+    <div class="sidebar-foot">
+      <button id="importBtn" class="btn" title="Rebuild transcripts and settings from your Meet Transcripts folder">
+        <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 2v8m0 0-3-3m3 3 3-3M3 11v1.5a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1V11"/></svg>
+        Restore from folder…
+      </button>
+      <input id="importInput" type="file" webkitdirectory multiple hidden>
     </div>
   </aside>
 
@@ -78,6 +88,7 @@
   <div id="toast" role="status" aria-live="polite"><span id="toastText"></span><button id="toastAction" hidden></button></div>
   <script src="shared.js"></script>
   <script src="docx.js"></script>
+  <script src="docximport.js"></script>
   <script src="viewer.js"></script>
 </body>
 </html>

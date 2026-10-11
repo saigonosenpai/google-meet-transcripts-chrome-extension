@@ -156,6 +156,51 @@ await v.goto(`chrome-extension://${id}/viewer.html#` + encodeURIComponent(call1.
 await v.waitForSelector("#showFile");
 await v.screenshot({ path: shots + "/viewer-list.png" });
 
+// --- reinstall: settings.json + .docx files bring everything back -------------------------------
+await v.evaluate(() => MT.saveSettings({ myName: "Sam Lee", hideCaptions: true, autoCaptions: false }));
+// A fresh install that hasn't restored yet keeps its calls in an interim file, never library.json.
+const libraryPath = path.join(downloads, "Meet Transcripts", "library (since reinstall).json");
+const readLibrary = () => { try { return JSON.parse(fs.readFileSync(libraryPath, "utf8")); } catch { return null; } };
+for (let i = 0; i < 60 && readLibrary()?.settings?.myName !== "Sam Lee"; i++) await v.waitForTimeout(250);
+const savedLib = readLibrary();
+assert.deepEqual(savedLib.settings, { autoCaptions: false, hideCaptions: true, myName: "Sam Lee", autoSave: true });
+assert.equal(Object.keys(savedLib.meetings).length, 3);
+console.log("library.json written:", Object.keys(savedLib.meetings).length, "meetings,", JSON.stringify(savedLib.settings));
+
+const titlesBefore = (await v.evaluate(async () => (await MT.listMeetings()).map((m) => MT.title(m)))).sort();
+const linesBefore = await v.evaluate(async () => Object.fromEntries(await Promise.all(
+  (await MT.listMeetings()).map(async (m) => [MT.title(m), (await MT.getTranscript(m.id)).length]))));
+await v.evaluate(() => chrome.storage.local.clear()); // what removing the extension does
+await v.goto("about:blank");
+await v.goto(`chrome-extension://${id}/viewer.html#welcome`);
+await v.waitForSelector("#emptyLib:not([hidden])");
+assert.ok(await v.$("#importBtn.pulse"), "restore button highlighted on a fresh library");
+// What picking the folder hands the page: every file in it, day folders included.
+const folderFiles = fs.readdirSync(path.join(downloads, "Meet Transcripts"), { recursive: true })
+  .map((f) => path.join(downloads, "Meet Transcripts", f)).filter((f) => fs.statSync(f).isFile());
+await v.evaluate(() => document.getElementById("importInput").removeAttribute("webkitdirectory"));
+await v.setInputFiles("#importInput", folderFiles);
+await v.waitForSelector("#toast.show");
+console.log("restore:", await v.textContent("#toastText"));
+const titlesAfter = (await v.evaluate(async () => (await MT.listMeetings()).map((m) => MT.title(m)))).sort();
+assert.deepEqual(titlesAfter, titlesBefore, "every meeting restored");
+const linesAfter = await v.evaluate(async () => Object.fromEntries(await Promise.all(
+  (await MT.listMeetings()).map(async (m) => [MT.title(m), (await MT.getTranscript(m.id)).length]))));
+assert.deepEqual(linesAfter, linesBefore, "every line restored, exactly as recorded");
+// library.json comes first; the .docx files of the same calls are recognized, not added twice.
+assert.match(await v.textContent("#toastText"), /Restored 3 meetings · settings · 3 already here/);
+// After a restore, library.json holds everything and the interim file is gone.
+const mainLib = path.join(downloads, "Meet Transcripts", "library.json");
+for (let i = 0; i < 60 && !(fs.existsSync(mainLib) && !fs.existsSync(libraryPath)); i++) await v.waitForTimeout(250);
+assert.equal(Object.keys(JSON.parse(fs.readFileSync(mainLib, "utf8")).meetings).length, 3, "library.json has all 3");
+assert.ok(!fs.existsSync(libraryPath), "interim file removed");
+console.log("folder now:", fs.readdirSync(path.join(downloads, "Meet Transcripts")).join(" | "));
+const restored = await v.evaluate(() => MT.getSettings());
+assert.equal(restored.myName, "Sam Lee");
+assert.equal(restored.hideCaptions, true);
+assert.equal(restored.autoCaptions, false);
+console.log("restored meetings:", titlesAfter.join(" | "));
+
 await close();
 
 // --- Chrome set to "Ask where to save each file": a clear warning, not a silent failure ----
