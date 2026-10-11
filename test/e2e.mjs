@@ -3,13 +3,18 @@
 //   node test/e2e.mjs <extension dir> <screenshot dir>
 import path from "node:path";
 import fs from "node:fs";
+import os from "node:os";
 import assert from "node:assert/strict";
 
 // Lets context.route() see the extension service worker's requests to Google Drive.
 process.env.PW_EXPERIMENTAL_SERVICE_WORKER_NETWORK_EVENTS = "1";
 const { chromium } = await import("playwright");
 
-const ext = path.resolve(process.argv[2] || ".");
+// Test a copy of the extension with a client ID built into config.js, as a real build would have.
+const src = path.resolve(process.argv[2] || ".");
+const ext = fs.mkdtempSync(path.join(os.tmpdir(), "meet-transcripts-"));
+fs.cpSync(src, ext, { recursive: true, filter: (p) => !/(\.git|node_modules|test)$/.test(p) });
+fs.writeFileSync(path.join(ext, "config.js"), 'const GOOGLE_CLIENT_ID = "test.apps.googleusercontent.com";\n');
 const shots = process.argv[3] || ".";
 const mock = fs.readFileSync(new URL("./mock-meet.html", import.meta.url), "utf8");
 const ctx = await chromium.launchPersistentContext("", {
@@ -26,6 +31,7 @@ await ctx.route("https://www.googleapis.com/**", async (r) => {
   const u = new URL(req.url());
   drive.push({ method: req.method(), path: u.pathname, auth: req.headers().authorization, body: req.postData() || "" });
   const json = (o) => r.fulfill({ contentType: "application/json", body: JSON.stringify(o) });
+  if (u.pathname === "/drive/v3/about") return json({ user: { emailAddress: "sam@example.com" } });
   if (u.pathname === "/drive/v3/files" && req.method() === "POST") return json({ id: "folder1" });
   if (u.pathname.startsWith("/drive/v3/files/")) return json({ id: "folder1", trashed: false });
   if (u.pathname.startsWith("/upload/")) {
@@ -48,15 +54,20 @@ ctx.on("page", async (p) => {
 });
 
 console.log("extension id:", id);
-await sw.evaluate(() => chrome.storage.local.set({ settings: { myName: "Sam", clientId: "test.apps.googleusercontent.com" } }));
+await sw.evaluate(() => chrome.storage.local.set({ settings: { myName: "Sam" } }));
 
-// --- connect Drive through the popup ----------------------------------------------------------
+// --- sign in through the popup ----------------------------------------------------------
 const popup = await ctx.newPage();
 await popup.setViewportSize({ width: 340, height: 700 });
 await popup.goto(`chrome-extension://${id}/popup.html`);
 assert.equal(await popup.inputValue("#redirect"), `https://${id}.chromiumapp.org/`);
+await popup.screenshot({ path: shots + "/popup-signed-out.png" });
 await popup.click("#connect");
+assert.ok(await popup.isHidden("#setup"), "no developer setup when the client ID is built in");
+assert.ok(await popup.isHidden("#account"));
 await popup.waitForSelector("#driveState.ok", { timeout: 15000 });
+assert.equal(await popup.textContent("#accountEmail"), "Signed in as sam@example.com");
+assert.ok(await popup.isHidden("#connect"));
 console.log("popup:", await popup.textContent("#driveMsg"));
 await popup.screenshot({ path: shots + "/popup.png" });
 await popup.close();
@@ -73,7 +84,7 @@ console.log("meeting:", JSON.stringify({ title: meta.title, participants: meta.p
 const bob = t.filter((e) => e.speaker === "Bob").map((e) => e.text).join(" ");
 for (let i = 1; i <= 30; i++) assert.equal(bob.split(`Sentence number ${i} `).length, 2, `sentence ${i} once`);
 assert.deepEqual(meta.speakers, ["Alice", "Sam", "Bob"]);
-assert.equal(drive.length, 0, "nothing uploaded mid-call");
+assert.ok(!drive.some((d) => d.path.startsWith("/upload/")), "nothing uploaded mid-call");
 
 // Leave the call -> Doc is created.
 await page.evaluate(() => window.leave());

@@ -31,22 +31,34 @@ timestamps.
 The extension's ID is always `kddloncdbcaidcdjcjpehapfbgnmicne` (the manifest has a fixed
 `key`), which the Google setup below relies on.
 
-## Connect Google Drive (one time, ~5 minutes)
+## Google sign-in
 
-Google requires every app that writes to Drive to have its own OAuth client, so you
-create one in your Google Cloud account:
+Using it is one click: open the popup, click **Sign in with Google**, pick your account.
+The popup then shows *Signed in as you@example.com*.
+
+For that button to work, the extension needs a Google OAuth client ID built into
+`config.js`. Google requires one per app; it's created once by whoever builds the
+extension (about 5 minutes), not by each user:
 
 1. Go to [console.cloud.google.com](https://console.cloud.google.com/), create a project
    (any name), then **APIs & Services → Library → Google Drive API → Enable**.
 2. **APIs & Services → OAuth consent screen**: choose *External* (or *Internal* on a
-   Google Workspace account), fill in the app name and your email. Under *Test users* add
-   the Google account you'll save transcripts to.
+   Google Workspace account) and fill in the app name and your email. Then either add the
+   accounts that will use it under *Test users*, or click **Publish app** so any Google
+   account can sign in. `drive.file` is a non-sensitive scope, so publishing doesn't need
+   Google's review.
 3. **APIs & Services → Credentials → Create credentials → OAuth client ID**:
    - Application type: **Web application**
    - Authorized redirect URI: `https://kddloncdbcaidcdjcjpehapfbgnmicne.chromiumapp.org/`
-     (also shown in the popup under *Setup*)
-4. Copy the client ID, open the extension popup, paste it under **Google Docs → Setup**,
-   and click **Connect Google Drive**.
+4. Put the client ID in `config.js`:
+   ```js
+   const GOOGLE_CLIENT_ID = "1234-abcd.apps.googleusercontent.com";
+   ```
+   and reload the extension in `chrome://extensions`. Client IDs aren't secret, so it's
+   fine to commit.
+
+(A build without a client ID shows a *Developer setup* box in the popup where one can be
+pasted instead.)
 
 The extension only asks for the `drive.file` permission: it can see and edit the files it
 creates, and nothing else in your Drive.
@@ -112,6 +124,7 @@ No build step: plain Manifest V3 JavaScript.
 | File | What it does |
 |------|--------------|
 | `content.js` | Runs on meet.google.com; watches the caption panel and saves entries |
+| `config.js` | The built-in Google OAuth client ID |
 | `shared.js` | Storage layout, grouping and export helpers (used everywhere) |
 | `background.js` | Toolbar badge, Google sign-in, and saving Docs to Drive |
 | `popup.*` | Toolbar popup |
@@ -120,7 +133,8 @@ No build step: plain Manifest V3 JavaScript.
 `test/e2e.mjs` loads the extension in Chromium with Playwright, serves
 `test/mock-meet.html` (a page that imitates Meet's caption DOM, including in-place
 revisions, Meet trimming the front of long captions, participant tiles and leaving the
-call) at a meet.google.com URL, fakes Google sign-in and the Drive API, and checks the
+call) at a meet.google.com URL, fakes Google sign-in and the Drive API (using a copy of
+the extension with a test client ID in `config.js`), and checks the
 stored transcript, the Doc's name, folder and content, and that later saves update the
 same Doc:
 

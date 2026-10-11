@@ -3,7 +3,8 @@
 //   meetings         -> { [id]: { id, code, title, startedAt, endedAt, entryCount, speakers } }
 //   t:<id>           -> [ { speaker, text, ts } ]   (ts = epoch ms when the line started)
 //   d:<id>           -> { fileId, url, syncedAt, hash, error }   (Google Drive copy)
-//   settings         -> { autoCaptions, hideCaptions, myName, paused, driveEnabled, clientId }
+//   settings         -> { autoCaptions, hideCaptions, myName, paused, driveEnabled, clientId,
+//                       driveConnected, driveAccount }
 
 const MT = (() => {
   const DEFAULT_SETTINGS = {
@@ -13,15 +14,19 @@ const MT = (() => {
   const get = (keys) => chrome.storage.local.get(keys);
   const set = (obj) => chrome.storage.local.set(obj);
 
+  // clientId falls back to the one built into config.js; a stored value overrides it.
   async function getSettings() {
     const { settings } = await get("settings");
-    return { ...DEFAULT_SETTINGS, ...(settings || {}) };
+    const s = { ...DEFAULT_SETTINGS, ...(settings || {}) };
+    s.builtInClientId = typeof GOOGLE_CLIENT_ID === "string" && GOOGLE_CLIENT_ID ? GOOGLE_CLIENT_ID : "";
+    s.clientId = s.clientId || s.builtInClientId;
+    return s;
   }
 
   async function saveSettings(patch) {
-    const settings = { ...(await getSettings()), ...patch };
-    await set({ settings });
-    return settings;
+    const { settings } = await get("settings");
+    await set({ settings: { ...(settings || {}), ...patch } });
+    return getSettings();
   }
 
   async function listMeetings() {

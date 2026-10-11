@@ -125,7 +125,7 @@ async function renderDrive() {
     html += `<a href="${esc(d.url)}" target="_blank" rel="noopener">Open in Google Docs ↗</a>` +
       `<span class="muted">Saved ${esc(new Date(d.syncedAt).toLocaleString())}</span>`;
   } else {
-    html += `<span class="muted">${s.clientId ? "Not in Google Drive yet" : "Google Drive not set up (see the extension popup)"}</span>`;
+    html += `<span class="muted">${s.driveConnected ? "Not in Google Drive yet" : "Sign in with Google in the extension popup to save this as a Doc"}</span>`;
   }
   if (s.clientId) html += `<button id="syncNow">${d && d.url ? "Update Doc" : "Save to Google Docs"}</button>`;
   if (d && d.error) html += `<span class="err">${esc(d.error)}</span>`;

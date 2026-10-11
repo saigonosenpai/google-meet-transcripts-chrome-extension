@@ -1,4 +1,4 @@
-importScripts("shared.js");
+importScripts("config.js", "shared.js");
 
 // --- toolbar badge ------------------------------------------------------------------------
 
@@ -28,8 +28,8 @@ async function getToken(interactive) {
   const { token } = await chrome.storage.session.get("token");
   if (token && token.expires > Date.now() + 60_000) return token.value;
 
-  const { clientId } = await MT.getSettings();
-  if (!clientId) throw new Error("Add your Google OAuth client ID in the extension popup.");
+  const { clientId, driveAccount } = await MT.getSettings();
+  if (!clientId) throw new Error("Google sign-in isn't set up in this build (see the README).");
   const url = new URL("https://accounts.google.com/o/oauth2/v2/auth");
   url.search = new URLSearchParams({
     client_id: clientId,
@@ -37,7 +37,8 @@ async function getToken(interactive) {
     redirect_uri: chrome.identity.getRedirectURL(),
     scope: SCOPE,
     include_granted_scopes: "true",
-    ...(interactive ? {} : { prompt: "none" }),
+    ...(interactive ? { prompt: "select_account" } : { prompt: "none" }),
+    ...(driveAccount && !interactive ? { login_hint: driveAccount } : {}),
   });
   let redirect;
   try {
@@ -52,15 +53,22 @@ async function getToken(interactive) {
   await chrome.storage.session.set({
     token: { value: params.get("access_token"), expires: Date.now() + Number(params.get("expires_in") || 3600) * 1000 },
   });
-  await MT.saveSettings({ driveConnected: true });
-  return params.get("access_token");
+  const accessToken = params.get("access_token");
+  const patch = { driveConnected: true };
+  if (interactive) {
+    // Remember which account was picked, to show it and to reuse it for silent renewals.
+    const about = await api(accessToken, "https://www.googleapis.com/drive/v3/about?fields=user(emailAddress)").catch(() => null);
+    patch.driveAccount = about ? about.user.emailAddress : "";
+  }
+  await MT.saveSettings(patch);
+  return accessToken;
 }
 
 async function signOut() {
   const { token } = await chrome.storage.session.get("token");
   if (token) fetch("https://oauth2.googleapis.com/revoke?token=" + token.value, { method: "POST" }).catch(() => {});
   await chrome.storage.session.remove("token");
-  await MT.saveSettings({ driveConnected: false });
+  await MT.saveSettings({ driveConnected: false, driveAccount: "" });
 }
 
 // --- Drive --------------------------------------------------------------------------------
