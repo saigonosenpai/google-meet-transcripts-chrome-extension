@@ -19,15 +19,23 @@ jobs:
       GH_TOKEN: ${{ github.token }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # full history and tags, to check where an existing release points
 
       - name: Check whether this version is already released
         id: version
         run: |
           version=$(jq -r .version manifest.json)
           echo "version=$version" >> "$GITHUB_OUTPUT"
-          if gh release view "v$version" > /dev/null 2>&1; then
+          tagged=$(git rev-list -n 1 "v$version" 2> /dev/null || true)
+          if gh release view "v$version" > /dev/null 2>&1 && [ -n "$tagged" ] && git merge-base --is-ancestor "$tagged" HEAD; then
             echo "Release v$version already exists; nothing to do."
             echo "new=false" >> "$GITHUB_OUTPUT"
+          elif gh release view "v$version" > /dev/null 2>&1; then
+            # The release's commit is no longer on main (history was rewritten): publish it again.
+            echo "Release v$version points outside main's history; replacing it."
+            gh release delete "v$version" --cleanup-tag --yes
+            echo "new=true" >> "$GITHUB_OUTPUT"
           else
             echo "new=true" >> "$GITHUB_OUTPUT"
           fi
