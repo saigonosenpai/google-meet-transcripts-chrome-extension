@@ -1,73 +1,45 @@
 # Meet Transcripts
 
 A Chrome extension that records your Google Meet calls as text transcripts and saves each
-call as a **Google Doc** in your Drive, so you can read, search and reference them later.
+call as a **Word document (.docx)**, so you can read, search and reference them later.
+Works on **macOS and Windows** (and Linux): anywhere desktop Chrome runs.
 
-It works from Meet's own **live captions**, so there is no audio recording and no server.
-Transcripts are kept in your browser and, once you connect Google Drive, also saved as one
-Doc per call:
+It works from Meet's own **live captions**: no audio recording, no account, no sign-in,
+nothing sent anywhere. Each call is saved to your Downloads folder:
 
 ```
-Meet Transcripts/                                        (folder in your Drive)
-  2026-10-11 - Weekly sync - Alice, Bob, Carol, Sam
-  2026-10-12 - Design review - Dana, Eli, Sam +3
+Downloads/Meet Transcripts/
+  2026-10-11 - Weekly sync - Alice, Bob, Carol, Sam.docx
+  2026-10-12 - Design review - Dana, Eli, Sam +3.docx
 ```
 
-The name is `Date - Event name - Participants`. The event name is the Meet / Calendar event
-title (rename it in the transcript viewer and the Doc follows). Participants are everyone
-seen in the call plus everyone who spoke; more than four are shortened to `+N`.
+On a Mac that's `~/Downloads/Meet Transcripts/`, on Windows
+`C:\Users\<you>\Downloads\Meet Transcripts\`. The files open in Word, Pages, Google Docs
+or LibreOffice.
 
-Each Doc has the date, duration, participants and meeting link, speaking time per person,
-highlights (possible action items, decisions and questions), and the full transcript with
-timestamps.
+The name is `Date - Event name - Participants`:
+
+- **Date**: the day the call started (`YYYY-MM-DD`, so files sort by date).
+- **Event name**: the Meet / Calendar event title. Rename the meeting in the transcript
+  viewer and the file is renamed too.
+- **Participants**: everyone seen in the call plus everyone who spoke; more than four
+  are shortened to `+N`.
+
+Characters that aren't allowed in file names on macOS or Windows (`: / \ * ? " < > |`)
+are replaced with spaces.
+
+Each document has the date, duration, participants and meeting link, speaking time per
+person, highlights (possible action items, decisions and questions), and the full
+transcript with timestamps.
 
 ## Install
 
 1. Download or clone this repo.
 2. Open `chrome://extensions` and turn on **Developer mode** (top right).
 3. Click **Load unpacked** and pick this folder.
-4. Pin the extension so you can see its badge.
+4. Pin the extension (puzzle-piece icon → pin) so you can see its badge.
 
-The extension's ID is always `kddloncdbcaidcdjcjpehapfbgnmicne` (the manifest has a fixed
-`key`), which the Google setup below relies on.
-
-## Google sign-in
-
-Using it is one click: open the popup, click **Sign in with Google**, pick your account.
-The popup then shows *Signed in as you@example.com*.
-
-For that button to work, the extension needs a Google OAuth client ID built into
-`config.js`. Google requires one per app; it's created once by whoever builds the
-extension (about 5 minutes), not by each user:
-
-1. Go to [console.cloud.google.com](https://console.cloud.google.com/), create a project
-   (any name), then **APIs & Services → Library → Google Drive API → Enable**.
-2. **APIs & Services → OAuth consent screen**: choose *External* (or *Internal* on a
-   Google Workspace account) and fill in the app name and your email. Then either add the
-   accounts that will use it under *Test users*, or click **Publish app** so any Google
-   account can sign in. `drive.file` is a non-sensitive scope, so publishing doesn't need
-   Google's review.
-3. **APIs & Services → Credentials → Create credentials → OAuth client ID**:
-   - Application type: **Web application**
-   - Authorized redirect URI: `https://kddloncdbcaidcdjcjpehapfbgnmicne.chromiumapp.org/`
-4. Put the client ID in `config.js`:
-   ```js
-   const GOOGLE_CLIENT_ID = "1234-abcd.apps.googleusercontent.com";
-   ```
-   and reload the extension in `chrome://extensions`. Client IDs aren't secret, so it's
-   fine to commit.
-
-(A build without a client ID shows a *Developer setup* box in the popup where one can be
-pasted instead.)
-
-The extension only asks for the `drive.file` permission: it can see and edit the files it
-creates, and nothing else in your Drive.
-
-**When Docs are saved:** when you leave the call or close the tab, and also after 2
-minutes without new captions (so a crashed browser loses little). If the call carries on,
-the same Doc is updated rather than duplicated. You can also click **Save to Google Docs /
-Update Doc** on any transcript in the viewer, including ones recorded before you connected
-Drive. Deleting a transcript in the extension leaves its Doc in Drive.
+Same steps on Mac and Windows. Other Chromium browsers (Edge, Brave, Arc) work too.
 
 ## Use it
 
@@ -80,13 +52,23 @@ and starts recording. The toolbar badge shows the state:
 | `CC` | You're in a call but captions are off, so nothing is being recorded |
 | `II` | Recording is paused |
 
-Click the icon to pause/resume, open the live transcript, or change settings:
+**When the .docx is saved:** when you leave the call or close the tab, and also after 2
+minutes without new captions (so a crash loses little). If the call carries on, the same
+file is overwritten with the fuller transcript; you get one file per call, never
+duplicates. Saving is silent: no download pop-up mid-call.
+
+Click the icon to pause/resume, open the live transcript, open the folder, or change
+settings:
 
 - **Turn on captions automatically**: clicks Meet's caption button when you join.
 - **Hide the caption overlay**: keeps recording but makes the captions on screen invisible.
 - **Your name**: Meet labels your own speech "You"; this replaces it with your name, in
-  the transcript and in Doc names.
-- **Save each call as a Doc in Drive**: turn automatic Drive saving on or off.
+  the transcript and in file names.
+- **Save each call as a .docx**: turn automatic saving on or off.
+
+Chrome's **Ask where to save each file before downloading** setting (off by default)
+applies to the extension too: with it on, every save opens a Save dialog. The extension
+warns you if that's blocking saves, with a button to the setting.
 
 ### Reading transcripts
 
@@ -99,10 +81,17 @@ Click the icon to pause/resume, open the live transcript, or change settings:
   (keyword-based, so skim them for context).
 - **Copy for AI summary** copies the transcript with a prompt asking for a summary, key
   points, action items and open questions. Paste it into any AI chat.
-- Export as Markdown, plain text or JSON. Click the title to rename the meeting.
-- The Google Doc link, when it was last saved, and any save error appear under the title.
+- Under the title: the saved file's name, **Show in folder** (Finder / Explorer) and
+  **Save again**. Older transcripts can be saved as .docx from here too.
+- **Export** as Word, Markdown, plain text or JSON. Click the title to rename the meeting.
 
 The transcript page updates live while the meeting is still being recorded.
+
+### Want them in Google Drive or OneDrive?
+
+Install the Google Drive (or OneDrive / Dropbox) desktop app and have it sync
+`Downloads/Meet Transcripts`. In Google Drive for desktop: **Settings → My Computer →
+Add folder**. The extension needs no changes for this.
 
 ## Good to know
 
@@ -110,6 +99,9 @@ The transcript page updates live while the meeting is still being recorded.
   conversation, and expect normal speech-recognition errors.
 - If you reload or rejoin the same meeting within 10 minutes, it continues the same
   transcript instead of starting a new one.
+- Moving a saved file out of `Meet Transcripts` is fine. A later save of that same call
+  writes a fresh copy back to the folder.
+- Deleting a transcript in the extension doesn't delete its .docx.
 - Meet changes its page structure from time to time. The extension looks for captions by
   their accessible "Captions" label first and falls back to known class names. If
   recording stops working after a Meet update, the selectors at the top of `content.js`
@@ -119,26 +111,26 @@ The transcript page updates live while the meeting is still being recorded.
 
 ## Development
 
-No build step: plain Manifest V3 JavaScript.
+No build step and no dependencies: plain Manifest V3 JavaScript. The manifest has a
+fixed `key`, so the extension ID (`kddloncdbcaidcdjcjpehapfbgnmicne`) and its stored
+transcripts stay the same wherever the folder lives.
 
 | File | What it does |
 |------|--------------|
 | `content.js` | Runs on meet.google.com; watches the caption panel and saves entries |
-| `config.js` | The built-in Google OAuth client ID |
-| `shared.js` | Storage layout, grouping and export helpers (used everywhere) |
-| `background.js` | Toolbar badge, Google sign-in, and saving Docs to Drive |
+| `shared.js` | Storage layout, grouping, file naming, and the document layout |
+| `docx.js` | Tiny dependency-free .docx (Word) writer |
+| `background.js` | Toolbar badge, and saving each call's .docx via `chrome.downloads` |
 | `popup.*` | Toolbar popup |
 | `viewer.*` | Transcript library and reader |
 
-`test/e2e.mjs` loads the extension in Chromium with Playwright, serves
-`test/mock-meet.html` (a page that imitates Meet's caption DOM, including in-place
-revisions, Meet trimming the front of long captions, participant tiles and leaving the
-call) at a meet.google.com URL, fakes Google sign-in and the Drive API (using a copy of
-the extension with a test client ID in `config.js`), and checks the
-stored transcript, the Doc's name, folder and content, and that later saves update the
-same Doc:
+`test/e2e.mjs` launches Chromium with the extension, serves `test/mock-meet.html` (a page
+that imitates Meet's caption DOM, including in-place revisions, Meet trimming the front of
+long captions, participant tiles and leaving the call) at a meet.google.com URL, and
+checks the stored transcript, the .docx's name and folder in a real Downloads directory,
+and that renaming replaces the file rather than adding a second one:
 
 ```bash
 npm i -D playwright   # or use a global install
-node test/e2e.mjs . /tmp   # screenshots and the Doc's HTML land in /tmp
+node test/e2e.mjs . /tmp   # screenshots and a copy of the saved .docx land in /tmp
 ```

@@ -113,30 +113,34 @@ function renderMeeting() {
   }).join("");
 
   renderTranscript();
-  renderDrive();
+  renderFile();
 }
 
-async function renderDrive() {
-  const el = $("drive");
-  const d = await MT.getDrive(current.id);
-  const s = await MT.getSettings();
+async function renderFile() {
+  const f = await MT.getFile(current.id);
   let html = "";
-  if (d && d.url) {
-    html += `<a href="${esc(d.url)}" target="_blank" rel="noopener">Open in Google Docs ↗</a>` +
-      `<span class="muted">Saved ${esc(new Date(d.syncedAt).toLocaleString())}</span>`;
+  if (f && f.downloadId) {
+    html += `<span>Saved as <b>${esc(f.filename.split(/[\\/]/).pop())}</b></span>` +
+      `<span class="muted">${esc(new Date(f.savedAt).toLocaleString())}</span>` +
+      `<button id="showFile">Show in folder</button>`;
   } else {
-    html += `<span class="muted">${s.driveConnected ? "Not in Google Drive yet" : "Sign in with Google in the extension popup to save this as a Doc"}</span>`;
+    html += `<span class="muted">Not saved as a Word file yet</span>`;
   }
-  if (s.clientId) html += `<button id="syncNow">${d && d.url ? "Update Doc" : "Save to Google Docs"}</button>`;
-  if (d && d.error) html += `<span class="err">${esc(d.error)}</span>`;
-  el.innerHTML = html;
-  const btn = $("syncNow");
-  if (btn) btn.addEventListener("click", async () => {
+  html += `<button id="saveNow">${f && f.downloadId ? "Save again" : "Save .docx"}</button>`;
+  if (f && f.error) html += `<span class="err">${esc(f.error)}</span>`;
+  if (f && f.error && f.askSetting) html += `<button id="dlSettings">Open Chrome download settings</button>`;
+  $("file").innerHTML = html;
+  if ($("dlSettings")) $("dlSettings").addEventListener("click", () =>
+    chrome.runtime.sendMessage({ type: "openDownloadSettings" }));
+  if ($("showFile")) $("showFile").addEventListener("click", () =>
+    chrome.runtime.sendMessage({ type: "showFile", downloadId: f.downloadId }));
+  const btn = $("saveNow");
+  btn.addEventListener("click", async () => {
     btn.disabled = true;
     btn.textContent = "Saving…";
-    const r = await chrome.runtime.sendMessage({ type: "syncNow", id: current.id });
-    toast(r.ok ? "Saved to Google Docs" : "Couldn't save: " + r.error);
-    renderDrive();
+    const r = await chrome.runtime.sendMessage({ type: "saveNow", id: current.id });
+    toast(r.ok ? "Saved to Downloads/Meet Transcripts" : "Couldn't save: " + r.error);
+    renderFile();
   });
 }
 
@@ -217,6 +221,7 @@ function bindActions() {
   document.addEventListener("click", () => ($("exportMenu").hidden = true));
   $("exportMenu").addEventListener("click", (e) => {
     const kind = e.target.dataset.export;
+    if (kind === "docx") download(fileBase() + ".docx", DOCX.build(MT.docBlocks(current, entries)), DOCX.MIME);
     if (kind === "md") download(fileBase() + ".md", MT.toMarkdown(current, entries), "text/markdown");
     if (kind === "txt") download(fileBase() + ".txt", MT.toText(current, entries), "text/plain");
     if (kind === "json") download(fileBase() + ".json", JSON.stringify({ ...current, entries }, null, 2), "application/json");
@@ -248,7 +253,7 @@ chrome.storage.onChanged.addListener(async (changes) => {
     if (fresh) current = fresh;
     renderList();
   }
-  if (current && changes["d:" + current.id]) renderDrive();
+  if (current && changes["f:" + current.id]) renderFile();
   if (current && changes["t:" + current.id]) {
     entries = changes["t:" + current.id].newValue || [];
     const main = document.querySelector("main");

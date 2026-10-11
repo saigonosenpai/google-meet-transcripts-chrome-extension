@@ -1,4 +1,4 @@
-importScripts("config.js", "shared.js");
+importScripts("shared.js", "docx.js");
 
 // --- toolbar badge ------------------------------------------------------------------------
 
@@ -16,107 +16,14 @@ function setBadge(tabId, msg) {
   chrome.action.setTitle({ tabId, title });
 }
 
-// --- Google sign-in -----------------------------------------------------------------------
+// --- saving .docx files -------------------------------------------------------------------
 //
-// OAuth implicit flow through chrome.identity.launchWebAuthFlow, using a "Web application"
-// client ID the user creates and pastes into the popup. Scope drive.file only lets the
-// extension see files it created itself.
+// Files go to <Downloads>/Meet Transcripts/ through chrome.downloads, which needs no folder
+// permission and works from this service worker. A later save of the same meeting
+// overwrites its file; if the name changed (renamed, more participants), the old file is
+// deleted so each meeting has exactly one document.
 
-const SCOPE = "https://www.googleapis.com/auth/drive.file";
-
-async function getToken(interactive) {
-  const { token } = await chrome.storage.session.get("token");
-  if (token && token.expires > Date.now() + 60_000) return token.value;
-
-  const { clientId, driveAccount } = await MT.getSettings();
-  if (!clientId) throw new Error("Google sign-in isn't set up in this build (see the README).");
-  const url = new URL("https://accounts.google.com/o/oauth2/v2/auth");
-  url.search = new URLSearchParams({
-    client_id: clientId,
-    response_type: "token",
-    redirect_uri: chrome.identity.getRedirectURL(),
-    scope: SCOPE,
-    include_granted_scopes: "true",
-    ...(interactive ? { prompt: "select_account" } : { prompt: "none" }),
-    ...(driveAccount && !interactive ? { login_hint: driveAccount } : {}),
-  });
-  let redirect;
-  try {
-    redirect = await chrome.identity.launchWebAuthFlow({ url: url.href, interactive });
-  } catch {
-    throw new Error(interactive ? "Google sign-in was cancelled or failed." : "SIGN_IN_NEEDED");
-  }
-  const params = new URLSearchParams(new URL(redirect).hash.slice(1));
-  if (params.get("error") || !params.get("access_token")) {
-    throw new Error(interactive ? "Google sign-in failed: " + (params.get("error") || "no token") : "SIGN_IN_NEEDED");
-  }
-  await chrome.storage.session.set({
-    token: { value: params.get("access_token"), expires: Date.now() + Number(params.get("expires_in") || 3600) * 1000 },
-  });
-  const accessToken = params.get("access_token");
-  const patch = { driveConnected: true };
-  if (interactive) {
-    // Remember which account was picked, to show it and to reuse it for silent renewals.
-    const about = await api(accessToken, "https://www.googleapis.com/drive/v3/about?fields=user(emailAddress)").catch(() => null);
-    patch.driveAccount = about ? about.user.emailAddress : "";
-  }
-  await MT.saveSettings(patch);
-  return accessToken;
-}
-
-async function signOut() {
-  const { token } = await chrome.storage.session.get("token");
-  if (token) fetch("https://oauth2.googleapis.com/revoke?token=" + token.value, { method: "POST" }).catch(() => {});
-  await chrome.storage.session.remove("token");
-  await MT.saveSettings({ driveConnected: false, driveAccount: "" });
-}
-
-// --- Drive --------------------------------------------------------------------------------
-
-const DRIVE = "https://www.googleapis.com/drive/v3/files";
-const UPLOAD = "https://www.googleapis.com/upload/drive/v3/files";
-const FOLDER_NAME = "Meet Transcripts";
-
-async function api(token, url, init = {}) {
-  const res = await fetch(url, { ...init, headers: { Authorization: "Bearer " + token, ...(init.headers || {}) } });
-  if (res.status === 401) {
-    await chrome.storage.session.remove("token");
-    throw new Error("SIGN_IN_NEEDED");
-  }
-  if (!res.ok) {
-    const err = new Error(`Google Drive error ${res.status}: ${(await res.text()).slice(0, 300)}`);
-    err.status = res.status;
-    throw err;
-  }
-  return res.json();
-}
-
-async function ensureFolder(token) {
-  const { driveFolderId } = await chrome.storage.local.get("driveFolderId");
-  if (driveFolderId) {
-    try {
-      const f = await api(token, `${DRIVE}/${driveFolderId}?fields=id,trashed`);
-      if (!f.trashed) return f.id;
-    } catch (err) {
-      if (!err.status) throw err; // sign-in/network problems; a 404 means make a new folder
-    }
-  }
-  const f = await api(token, `${DRIVE}?fields=id`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ name: FOLDER_NAME, mimeType: "application/vnd.google-apps.folder" }),
-  });
-  await chrome.storage.local.set({ driveFolderId: f.id });
-  return f.id;
-}
-
-// Uploading HTML with a Google Docs mime type makes Drive convert it into a native Doc.
-function multipart(metadata, html) {
-  const boundary = "mt" + Math.random().toString(36).slice(2);
-  const body = `--${boundary}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n${JSON.stringify(metadata)}\r\n` +
-    `--${boundary}\r\nContent-Type: text/html; charset=UTF-8\r\n\r\n${html}\r\n--${boundary}--`;
-  return { body, headers: { "Content-Type": "multipart/related; boundary=" + boundary } };
-}
+const FOLDER = "Meet Transcripts";
 
 function hash(s) {
   let h = 0;
@@ -124,66 +31,86 @@ function hash(s) {
   return String(h);
 }
 
-const syncing = new Map(); // meeting id -> promise, so overlapping triggers share one upload
-
-function syncMeeting(id, opts = {}) {
-  if (!syncing.has(id)) syncing.set(id, doSync(id, opts).finally(() => syncing.delete(id)));
-  return syncing.get(id);
+function waitForDownload(downloadId) {
+  return new Promise((resolve, reject) => {
+    const done = (item) => {
+      chrome.downloads.onChanged.removeListener(onChanged);
+      if (item.state === "complete") resolve(item);
+      else reject(new Error("Couldn't save the file" + (item.error ? ": " + item.error : "")));
+    };
+    const onChanged = async (delta) => {
+      if (delta.id !== downloadId || !delta.state || delta.state.current === "in_progress") return;
+      done((await chrome.downloads.search({ id: downloadId }))[0]);
+    };
+    chrome.downloads.onChanged.addListener(onChanged);
+    chrome.downloads.search({ id: downloadId }).then(([item]) => item && item.state !== "in_progress" && done(item));
+  });
 }
 
-async function doSync(id, { interactive = false, force = false } = {}) {
-  const settings = await MT.getSettings();
-  if (!force && (!settings.driveEnabled || !settings.clientId)) return null;
+const saving = new Map(); // meeting id -> promise, so overlapping triggers share one save
+
+function saveDoc(id, opts = {}) {
+  if (!saving.has(id)) saving.set(id, doSave(id, opts).finally(() => saving.delete(id)));
+  return saving.get(id);
+}
+
+async function doSave(id, { manual = false } = {}) {
+  if (!manual && !(await MT.getSettings()).autoSave) return null;
   const meta = (await MT.listMeetings()).find((m) => m.id === id);
   const entries = await MT.getTranscript(id);
   if (!meta || !entries.length) return null;
 
-  const prev = (await MT.getDrive(id)) || {};
-  const name = MT.docName(meta);
-  const html = MT.toDocHtml(meta, entries);
-  const h = hash(name + html);
-  if (prev.fileId && prev.hash === h && !prev.error) return prev;
+  const prev = (await MT.getFile(id)) || {};
+  const name = MT.docName(meta) + ".docx";
+  const blocks = MT.docBlocks(meta, entries);
+  const h = hash(name + JSON.stringify(blocks));
+  if (prev.downloadId && prev.hash === h && !prev.error && !manual) return prev;
 
   try {
-    const token = await getToken(interactive);
-    let file = null;
-    if (prev.fileId) {
-      const { body, headers } = multipart({ name }, html);
-      try {
-        file = await api(token, `${UPLOAD}/${prev.fileId}?uploadType=multipart&fields=id,webViewLink,trashed`,
-          { method: "PATCH", headers, body });
-        if (file.trashed) file = null;
-      } catch (err) {
-        if (err.status !== 404 && err.status !== 403) throw err; // deleted, or no longer ours: make a new one
-      }
+    if (prev.downloadId) {
+      const [old] = await chrome.downloads.search({ id: prev.downloadId });
+      if (old && old.exists && !old.filename.endsWith(name)) await chrome.downloads.removeFile(old.id).catch(() => {});
+      await chrome.downloads.erase({ id: prev.downloadId });
     }
-    if (!file) {
-      const folder = await ensureFolder(token);
-      const { body, headers } = multipart(
-        { name, mimeType: "application/vnd.google-apps.document", parents: [folder] }, html);
-      file = await api(token, `${UPLOAD}?uploadType=multipart&fields=id,webViewLink`, { method: "POST", headers, body });
+    // Automatic saves happen mid-call; keep Chrome's download bubble out of the way.
+    if (!manual) await chrome.downloads.setUiOptions({ enabled: false }).catch(() => {});
+    let item;
+    try {
+      const downloadId = await chrome.downloads.download({
+        url: DOCX.dataUrl(DOCX.build(blocks)),
+        filename: FOLDER + "/" + name,
+        conflictAction: "overwrite",
+        saveAs: false,
+      });
+      item = await waitForDownload(downloadId);
+    } finally {
+      if (!manual) await chrome.downloads.setUiOptions({ enabled: true }).catch(() => {});
     }
-    const result = { fileId: file.id, url: file.webViewLink, name, syncedAt: Date.now(), hash: h, error: null };
-    await MT.setDrive(id, result);
+    const result = { downloadId: item.id, filename: item.filename, savedAt: Date.now(), hash: h, error: null };
+    await MT.setFile(id, result);
     return result;
   } catch (err) {
-    const signIn = err.message === "SIGN_IN_NEEDED";
-    const error = signIn ? "Not signed in to Google. Open the extension popup and click Sign in with Google." : err.message;
-    await MT.setDrive(id, { ...prev, error });
-    if (signIn) await MT.saveSettings({ driveConnected: false });
+    // With Chrome's "Ask where to save each file" on, every save opens a dialog; closing it
+    // (or saving while nobody is at the screen) cancels the download.
+    const askSetting = /USER_CANCELED/.test(err.message);
+    const error = askSetting
+      ? "Chrome asked where to save the file and the dialog was closed. To save automatically, turn off " +
+        "\u201cAsk where to save each file before downloading\u201d in Chrome\u2019s download settings."
+      : err.message;
+    await MT.setFile(id, { ...prev, error, askSetting });
     throw new Error(error);
   }
 }
 
-// --- when to sync -------------------------------------------------------------------------
+// --- when to save -------------------------------------------------------------------------
 //
-// A meeting is uploaded when its tab closes, when the user leaves the call, or after
-// IDLE_MIN minutes without new captions. Later captions update the same Doc.
+// A meeting is saved when its tab closes, when the user leaves the call, or after IDLE_MIN
+// minutes without new captions (so a crash loses little). Later captions update the file.
 
 const IDLE_MIN = 2;
 
 chrome.alarms.onAlarm.addListener((alarm) => {
-  if (alarm.name.startsWith("sync:")) syncMeeting(alarm.name.slice(5)).catch(() => {});
+  if (alarm.name.startsWith("save:")) saveDoc(alarm.name.slice(5)).catch(() => {});
 });
 
 chrome.tabs.onRemoved.addListener(async (tabId) => {
@@ -191,8 +118,8 @@ chrome.tabs.onRemoved.addListener(async (tabId) => {
   const id = (await chrome.storage.session.get(key))[key];
   if (!id) return;
   await chrome.storage.session.remove(key);
-  chrome.alarms.clear("sync:" + id);
-  syncMeeting(id).catch(() => {});
+  chrome.alarms.clear("save:" + id);
+  saveDoc(id).catch(() => {});
 });
 
 chrome.runtime.onMessage.addListener((msg, sender, reply) => {
@@ -203,24 +130,25 @@ chrome.runtime.onMessage.addListener((msg, sender, reply) => {
       return false;
     case "meetingSaved":
       if (tabId) chrome.storage.session.set({ ["tab:" + tabId]: msg.id });
-      chrome.alarms.create("sync:" + msg.id, { delayInMinutes: IDLE_MIN });
+      chrome.alarms.create("save:" + msg.id, { delayInMinutes: IDLE_MIN });
       return false;
     case "meetingEnded":
-      chrome.alarms.clear("sync:" + msg.id);
-      syncMeeting(msg.id).catch(() => {});
+      chrome.alarms.clear("save:" + msg.id);
+      saveDoc(msg.id).catch(() => {});
       return false;
-    case "syncNow":
-      syncMeeting(msg.id, { interactive: true, force: true })
+    case "saveNow":
+      saveDoc(msg.id, { manual: true })
         .then((r) => reply({ ok: true, result: r }), (e) => reply({ ok: false, error: e.message }));
       return true;
-    case "connectDrive":
-      chrome.storage.session.remove("token")
-        .then(() => getToken(true))
-        .then(() => reply({ ok: true }), (e) => reply({ ok: false, error: e.message }));
-      return true;
-    case "disconnectDrive":
-      signOut().then(() => reply({ ok: true }));
-      return true;
+    case "openDownloadSettings":
+      chrome.tabs.create({ url: "chrome://settings/downloads" });
+      return false;
+    case "showFile":
+      chrome.downloads.search({ id: msg.downloadId || -1 }).then(([item]) => {
+        if (item && item.exists) chrome.downloads.show(item.id);
+        else chrome.downloads.showDefaultFolder();
+      });
+      return false;
   }
   return false;
 });

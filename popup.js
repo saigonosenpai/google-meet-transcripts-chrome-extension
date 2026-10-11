@@ -44,23 +44,20 @@ function render() {
     : "Turn on captions (CC button, or press c) — the transcript comes from Meet's live captions.";
 }
 
-function driveMsg(text, isError) {
-  $("driveMsg").textContent = text;
-  $("driveMsg").classList.toggle("err", !!isError);
+async function fileRecords() {
+  const all = await chrome.storage.local.get(null);
+  return Object.entries(all).filter(([k]) => k.startsWith("f:")).map(([, v]) => v);
 }
 
-async function renderDrive() {
-  const s = await MT.getSettings();
-  const connected = !!s.driveConnected;
-  $("driveState").textContent = connected ? "Connected" : "Not signed in";
-  $("driveState").classList.toggle("ok", connected);
-  $("connect").hidden = connected;
-  $("connect").disabled = !s.clientId;
-  $("account").hidden = !connected;
-  $("accountEmail").textContent = s.driveAccount ? "Signed in as " + s.driveAccount : "Signed in";
-  // Only builds without a client ID in config.js need the developer setup.
-  $("setup").hidden = !!s.builtInClientId;
-  if (!s.clientId) $("setup").open = true;
+async function latestFile() {
+  return (await fileRecords()).filter((f) => f.downloadId).sort((a, b) => b.savedAt - a.savedAt)[0] || null;
+}
+
+async function renderFiles() {
+  const f = await latestFile();
+  $("lastSaved").textContent = f ? "Last saved: " + f.filename.split(/[\\/]/).pop() : "";
+  const blocked = (await fileRecords()).some((r) => r.error && r.askSetting);
+  $("askWarning").hidden = !blocked;
 }
 
 async function init() {
@@ -82,24 +79,14 @@ async function init() {
   });
   $("openViewer").addEventListener("click", () => chrome.tabs.create({ url: "viewer.html" }));
 
-  $("driveEnabled").checked = s.driveEnabled;
-  $("driveEnabled").addEventListener("change", (e) => MT.saveSettings({ driveEnabled: e.target.checked }));
-  $("clientId").value = s.builtInClientId ? "" : s.clientId;
-  $("clientId").addEventListener("input", (e) => { MT.saveSettings({ clientId: e.target.value.trim() }); renderDrive(); });
-  $("redirect").value = chrome.identity.getRedirectURL();
-  $("redirect").addEventListener("focus", (e) => e.target.select());
-  $("connect").addEventListener("click", async () => {
-    driveMsg("Opening Google sign-in…");
-    const r = await chrome.runtime.sendMessage({ type: "connectDrive" });
-    driveMsg(r.ok ? "Signed in. Calls will be saved to Google Docs." : r.error, !r.ok);
-    renderDrive();
+  $("autoSave").checked = s.autoSave;
+  $("autoSave").addEventListener("change", (e) => MT.saveSettings({ autoSave: e.target.checked }));
+  $("showFolder").addEventListener("click", async () => {
+    const f = await latestFile();
+    chrome.runtime.sendMessage({ type: "showFile", downloadId: f && f.downloadId });
   });
-  $("disconnect").addEventListener("click", async () => {
-    await chrome.runtime.sendMessage({ type: "disconnectDrive" });
-    driveMsg("");
-    renderDrive();
-  });
-  renderDrive();
+  $("dlSettings").addEventListener("click", () => chrome.runtime.sendMessage({ type: "openDownloadSettings" }));
+  renderFiles();
   await refresh();
   setInterval(refresh, 2000);
 }

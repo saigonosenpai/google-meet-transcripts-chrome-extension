@@ -22,7 +22,7 @@
         <h1 id="title" contenteditable="plaintext-only" spellcheck="false" title="Click to rename"></h1>
         <p id="meta" class="muted"></p>
         <div id="speakers" class="speakers"></div>
-        <div id="drive" class="drive"></div>
+        <div id="file" class="file"></div>
       </header>
 
       <div class="toolbar">
@@ -38,6 +38,7 @@
         <div class="menu">
           <button id="exportBtn">Export ▾</button>
           <div id="exportMenu" class="menu-list" hidden>
+            <button data-export="docx">Word (.docx)</button>
             <button data-export="md">Markdown (.md)</button>
             <button data-export="txt">Plain text (.txt)</button>
             <button data-export="json">JSON (.json)</button>
@@ -53,8 +54,8 @@
   </main>
 
   <div id="toast" hidden></div>
-  <script src="config.js"></script>
   <script src="shared.js"></script>
+  <script src="docx.js"></script>
   <script src="viewer.js"></script>
 </body>
 </html>

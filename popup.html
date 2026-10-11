@@ -25,35 +25,22 @@
     <label class="name">Your name <input type="text" id="myName" placeholder="replaces “You”"></label>
   </section>
 
-  <section class="card drive">
-    <div class="row"><svg class="gicon" viewBox="0 0 24 24" aria-hidden="true"><path fill="#4285f4" d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path fill="#a1c2fa" d="M14 2v6h6z"/><path fill="#fff" d="M8 12h8v1.5H8zm0 3h8v1.5H8zm0 3h5v1.5H8z"/></svg>
-      <strong>Google Docs</strong><span id="driveState" class="pill"></span></div>
-    <label><input type="checkbox" id="driveEnabled"> Save each call as a Doc in Drive</label>
-    <p class="muted small">Named <code>Date - Event - Participants</code>, in a “Meet Transcripts” folder.</p>
-    <button id="connect" class="google">
-      <svg viewBox="0 0 48 48" aria-hidden="true"><path fill="#4285F4" d="M45.1 24.5c0-1.6-.1-3.1-.4-4.5H24v8.5h11.8c-.5 2.7-2.1 5-4.4 6.6v5.5h7.1c4.2-3.8 6.6-9.5 6.6-16.1z"/><path fill="#34A853" d="M24 46c5.9 0 10.9-2 14.5-5.3l-7.1-5.5c-2 1.3-4.5 2.1-7.4 2.1-5.7 0-10.6-3.9-12.3-9.1H4.4v5.7C8 41.1 15.4 46 24 46z"/><path fill="#FBBC05" d="M11.7 28.2c-.4-1.3-.7-2.7-.7-4.2s.3-2.9.7-4.2v-5.7H4.4C2.9 17.1 2 20.4 2 24s.9 6.9 2.4 9.9l7.3-5.7z"/><path fill="#EA4335" d="M24 10.7c3.2 0 6.1 1.1 8.4 3.3l6.3-6.3C34.9 4.2 29.9 2 24 2 15.4 2 8 6.9 4.4 14.1l7.3 5.7c1.7-5.2 6.6-9.1 12.3-9.1z"/></svg>
-      Sign in with Google
-    </button>
-    <div id="account" class="account" hidden>
-      <span id="accountEmail"></span>
-      <button id="disconnect" class="link">Sign out</button>
+  <section class="card files">
+    <div class="row"><svg class="gicon" viewBox="0 0 24 24" aria-hidden="true"><path fill="#2b579a" d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path fill="#a5bde3" d="M14 2v6h6z"/><path fill="#fff" d="M7.5 11h1.6l.9 4.2 1.1-4.2h1.3l1.1 4.2.9-4.2h1.6l-1.7 6.5h-1.4l-1.1-4.1-1.1 4.1H9.2z"/></svg>
+      <strong>Word documents</strong></div>
+    <label><input type="checkbox" id="autoSave"> Save each call as a .docx</label>
+    <p class="muted small">Saved to <code>Downloads/Meet Transcripts</code>, named
+      <code>Date - Event - Participants</code>. Opens in Word, Pages or Google Docs.</p>
+    <p id="lastSaved" class="muted small"></p>
+    <div id="askWarning" class="warn small" hidden>
+      Chrome is set to ask where to save each file, so transcripts can't save automatically.
+      <button id="dlSettings" class="link">Change this setting</button>
     </div>
-    <p id="driveMsg" class="muted small"></p>
-    <details id="setup" hidden>
-      <summary>Developer setup: no Google client ID in this build</summary>
-      <ol class="small">
-        <li>In Google Cloud Console, enable the <b>Google Drive API</b>.</li>
-        <li>Create an OAuth client ID of type <b>Web application</b> with this redirect URI:
-          <input id="redirect" readonly></li>
-        <li>Put the client ID in <code>config.js</code> (so it's built in for everyone), or paste it here:</li>
-      </ol>
-      <input type="text" id="clientId" placeholder="xxxx.apps.googleusercontent.com">
-    </details>
+    <button id="showFolder">Show folder</button>
   </section>
 
   <button id="openViewer" class="primary">All transcripts</button>
 
-  <script src="config.js"></script>
   <script src="shared.js"></script>
   <script src="popup.js"></script>
 </body>
