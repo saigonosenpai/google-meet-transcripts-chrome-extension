@@ -314,13 +314,8 @@ screen. If it can't, set **Your name** in the popup.
 
 ## Version history
 
-| Version | What changed |
-|---|---|
-| 1.4.0 | `library.json` keeps your history and settings in the transcripts folder; **Restore from folder…** rebuilds the library after a reinstall, also from `.docx` files |
-| 1.3.0 | Redesigned popup and library: Apple-style look, dark mode, segmented filters, export menu, undo for delete |
-| 1.2.0 | Each call saved as a `.docx` in Downloads (no Google sign-in), works the same on Windows and Mac; spontaneous calls named after who joined (`Call with …`); a folder per day |
-| 1.1.0 | Saved each call to Google Drive (replaced by local `.docx` files in 1.2.0) |
-| 1.0.0 | First release: records Meet captions into a searchable library |
+What changed in each version is in [CHANGELOG.md](CHANGELOG.md) and on the
+[Releases](https://github.com/saigonosenpai/google-meet-transcripts-chrome-extension/releases) page.
 
 ## For developers
 
@@ -349,6 +344,19 @@ delete and undo, the "ask where to save" warning, and a full wipe-and-restore fr
 npm i -D playwright      # or use a global install
 node test/e2e.mjs . /tmp # screenshots and a copy of the saved .docx land in /tmp
 ```
+
+### Releasing
+
+Releases are automatic. `.github/workflows/release.yml` runs on every push to `main`: if the
+`version` in `manifest.json` has no release yet, it runs the end-to-end test, zips the
+extension (without tests and screenshots), and publishes release `v<version>` with that
+version's section of `CHANGELOG.md` as the notes. To ship an update:
+
+1. Bump `version` in `manifest.json` (e.g. `1.4.0` → `1.5.0`).
+2. Add a `## 1.5.0` section at the top of `CHANGELOG.md`.
+3. Push to `main`.
+
+Pushes that don't change the version publish nothing. If the test fails, no release is made.
 
 Issues and pull requests are welcome.
 

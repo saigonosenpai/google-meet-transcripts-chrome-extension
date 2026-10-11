@@ -1,0 +1,76 @@
+# Publishes a GitHub release whenever main carries a manifest version that hasn't been released yet.
+# To ship an update: bump "version" in manifest.json, add a "## <version>" section to CHANGELOG.md, push.
+name: Release
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency: release
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check whether this version is already released
+        id: version
+        run: |
+          version=$(jq -r .version manifest.json)
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          if gh release view "v$version" > /dev/null 2>&1; then
+            echo "Release v$version already exists; nothing to do."
+            echo "new=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "new=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: actions/setup-node@v4
+        if: steps.version.outputs.new == 'true'
+        with:
+          node-version: 22
+
+      - name: Run the end-to-end test
+        if: steps.version.outputs.new == 'true'
+        run: |
+          npm install --no-save playwright
+          npx playwright install --with-deps chromium
+          node test/e2e.mjs . "$RUNNER_TEMP"
+
+      - name: Build the extension zip
+        if: steps.version.outputs.new == 'true'
+        run: |
+          mkdir -p dist/meet-transcripts
+          cp -r manifest.json *.js *.html *.css icons LICENSE README.md dist/meet-transcripts/
+          cd dist && zip -qr "meet-transcripts-v${{ steps.version.outputs.version }}.zip" meet-transcripts
+
+      - name: Write the release notes
+        if: steps.version.outputs.new == 'true'
+        run: |
+          version=${{ steps.version.outputs.version }}
+          awk -v v="## $version" '$0 == v {on = 1; next} /^## / {on = 0} on' CHANGELOG.md > notes.md
+          if [ ! -s notes.md ]; then echo "Version $version." > notes.md; fi
+          cat >> notes.md <<NOTES
+
+          ---
+
+          **Install:** download \`meet-transcripts-v$version.zip\` below, unzip it somewhere permanent, open \`chrome://extensions\`, turn on **Developer mode**, click **Load unpacked** and pick the \`meet-transcripts\` folder.
+
+          **Update:** copy the new files over your existing folder, then click the reload arrow (↻) on the extension in \`chrome://extensions\`. Don't click Remove.
+
+          Full instructions are in the [README](https://github.com/${{ github.repository }}#readme).
+          NOTES
+
+      - name: Publish the release
+        if: steps.version.outputs.new == 'true'
+        run: |
+          version=${{ steps.version.outputs.version }}
+          gh release create "v$version" "dist/meet-transcripts-v$version.zip" \
+            --title "Meet Transcripts $version" --notes-file notes.md --target "$GITHUB_SHA"

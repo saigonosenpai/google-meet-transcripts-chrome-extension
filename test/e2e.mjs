@@ -24,7 +24,8 @@ async function launch({ askWhereToSave = false } = {}) {
   const port = 9300 + Math.floor(Math.random() * 500);
   const proc = spawn(chromium.executablePath(), [
     "--headless=new", `--remote-debugging-port=${port}`, `--user-data-dir=${profile}`, "--no-first-run",
-    ...(process.getuid && process.getuid() === 0 ? ["--no-sandbox"] : []), // containers run as root
+    // Containers run as root, and CI runners' AppArmor blocks Chromium's sandbox.
+    ...(process.env.CI || (process.getuid && process.getuid() === 0) ? ["--no-sandbox"] : []),
     `--disable-extensions-except=${ext}`, `--load-extension=${ext}`, "about:blank",
   ], { stdio: "ignore" });
   let browser;
