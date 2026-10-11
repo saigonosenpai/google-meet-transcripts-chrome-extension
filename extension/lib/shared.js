@@ -5,14 +5,14 @@
 //                                  gaps: [{ from, to, reason }], nameMap: { old: new }, left } }
 //   t:<id>           -> [ { speaker, text, ts } ]   (ts = epoch ms when the line started)
 //   f:<id>           -> { downloadId, filename, savedAt, hash, error }   (the saved .docx)
-//   settings         -> { autoCaptions, hideCaptions, myName, paused, autoSave, showIndicator,
+//   settings         -> { hideCaptions, myName, paused, autoSave, showIndicator,
 //                         platforms: { meet, teams, zoom }, nameMap: { lowercased old: new } }
 //
 // Meetings recorded before Teams and Zoom support have no `platform`: they're Google Meet.
 
 const MT = (() => {
   const DEFAULT_SETTINGS = {
-    autoCaptions: true, hideCaptions: false, myName: "", paused: false, autoSave: true,
+    hideCaptions: false, myName: "", paused: false, autoSave: true,
     showIndicator: true, platforms: { meet: true, teams: true, zoom: true }, nameMap: {},
   };
 

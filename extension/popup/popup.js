@@ -73,7 +73,6 @@ async function renderFiles() {
 
 async function init() {
   const s = await MT.getSettings();
-  $("autoCaptions").checked = s.autoCaptions;
   $("hideCaptions").checked = s.hideCaptions;
   $("showIndicator").checked = s.showIndicator;
   $("myName").value = s.myName;
@@ -91,7 +90,7 @@ async function init() {
     await navigator.clipboard.writeText(JSON.stringify(report || { error: "the page didn't answer" }, null, 2));
     $("diagnose").textContent = "Copied. Paste it into a GitHub issue (it has no transcript text).";
   });
-  for (const id of ["autoCaptions", "hideCaptions", "showIndicator"]) {
+  for (const id of ["hideCaptions", "showIndicator"]) {
     $(id).addEventListener("change", (e) => MT.saveSettings({ [id]: e.target.checked }));
   }
   $("myName").addEventListener("input", (e) => MT.saveSettings({ myName: e.target.value.trim() }));

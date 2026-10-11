@@ -297,7 +297,9 @@
   }
 
   async function tryEnableCaptions(force = false) {
-    if (!force && (!settings.autoCaptions || autoTries >= 3 || Date.now() - lastAutoTry < 8000)) return;
+    // Everything depends on captions, so they're always turned on; only not while paused,
+    // which is how you keep a call out of your transcripts.
+    if (!force && (settings.paused || autoTries >= 3 || Date.now() - lastAutoTry < 8000)) return;
     lastAutoTry = Date.now();
     autoTries++;
     try { await P.enableCaptions(); } catch (err) { console.warn("[Meeting Transcripts] couldn't turn on captions", err); }

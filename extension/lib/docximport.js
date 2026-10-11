@@ -135,7 +135,7 @@ const DOCX_IMPORT = (() => {
     let data;
     try { data = JSON.parse(text); } catch { return null; }
     if (!data || data.app !== "meet-transcripts" || data.kind !== "library" || typeof data.meetings !== "object") return null;
-    const keep = { autoCaptions: "boolean", hideCaptions: "boolean", myName: "string", autoSave: "boolean",
+    const keep = { hideCaptions: "boolean", myName: "string", autoSave: "boolean",
       showIndicator: "boolean", platforms: "object", nameMap: "object" };
     const settings = Object.fromEntries(Object.entries(data.settings || {})
       .filter(([k, v]) => typeof v === keep[k] && v !== null && !Array.isArray(v)));

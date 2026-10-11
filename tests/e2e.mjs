@@ -160,14 +160,14 @@ await v.waitForSelector("#showFile");
 await v.screenshot({ path: shots + "/viewer-list.png" });
 
 // --- reinstall: settings.json + .docx files bring everything back -------------------------------
-await v.evaluate(() => MT.saveSettings({ myName: "Sam Lee", hideCaptions: true, autoCaptions: false }));
+await v.evaluate(() => MT.saveSettings({ myName: "Sam Lee", hideCaptions: true }));
 // A fresh install that hasn't restored yet keeps its calls in an interim file, never library.json.
 const libraryPath = path.join(downloads, "Meeting Transcripts", "library (since reinstall).json");
 const readLibrary = () => { try { return JSON.parse(fs.readFileSync(libraryPath, "utf8")); } catch { return null; } };
 for (let i = 0; i < 60 && readLibrary()?.settings?.myName !== "Sam Lee"; i++) await v.waitForTimeout(250);
 const savedLib = readLibrary();
 assert.deepEqual({ ...savedLib.settings, showIndicator: undefined, platforms: undefined, nameMap: undefined },
-  { autoCaptions: false, hideCaptions: true, myName: "Sam Lee", autoSave: true, showIndicator: undefined, platforms: undefined, nameMap: undefined });
+  { hideCaptions: true, myName: "Sam Lee", autoSave: true, showIndicator: undefined, platforms: undefined, nameMap: undefined });
 assert.deepEqual(savedLib.settings.platforms, { meet: true, teams: true, zoom: true });
 assert.equal(Object.keys(savedLib.meetings).length, 3);
 console.log("library.json written:", Object.keys(savedLib.meetings).length, "meetings,", JSON.stringify(savedLib.settings));
@@ -203,11 +203,10 @@ console.log("folder now:", fs.readdirSync(path.join(downloads, "Meeting Transcri
 const restored = await v.evaluate(() => MT.getSettings());
 assert.equal(restored.myName, "Sam Lee");
 assert.equal(restored.hideCaptions, true);
-assert.equal(restored.autoCaptions, false);
 console.log("restored meetings:", titlesAfter.join(" | "));
 
 // --- Microsoft Teams ------------------------------------------------------------------------------
-await v.evaluate(() => MT.saveSettings({ autoCaptions: true, hideCaptions: false }));
+await v.evaluate(() => MT.saveSettings({ hideCaptions: false }));
 await ctx.route("https://teams.microsoft.com/**", (r) => r.fulfill({ contentType: "text/html", body: fixture("mock-teams.html") }));
 const meetingsOf = async (platform) => Object.values((await sw.evaluate(() => chrome.storage.local.get("meetings"))).meetings)
   .filter((m) => m.platform === platform);
@@ -294,6 +293,16 @@ assert.ok(!fs.existsSync(zFile.filename), "old file replaced");
 assert.deepEqual((await v.evaluate(() => MT.getSettings())).nameMap, { "ben cho": "Benjamin Cho" });
 zLines = await sw.evaluate((k) => chrome.storage.local.get(k).then((d) => d[k]), "t:" + zm.id);
 assert.deepEqual(zLines.map((e) => e.speaker), ["Ann Lee", "Benjamin Cho", "Ann Lee"]);
+
+// --- paused: captions aren't even turned on ----------------------------------------------------------
+await v.evaluate(() => MT.saveSettings({ paused: true }));
+const zp1 = await ctx.newPage();
+await zp1.goto("https://app.zoom.us/wc/5556667778/join");
+await zp1.waitForTimeout(5000);
+assert.ok(!(await zp1.$('[role="menu"], #live-transcription-subtitle')), "captions left off while paused");
+await zp1.close();
+await v.evaluate(() => MT.saveSettings({ paused: false }));
+console.log("paused: captions left off");
 
 // --- turning a platform off: nothing is recorded there ------------------------------------------------
 await v.evaluate(() => MT.getSettings().then((s) => MT.saveSettings({ platforms: { ...s.platforms, zoom: false } })));

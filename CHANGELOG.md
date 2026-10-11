@@ -3,6 +3,12 @@
 Each version here becomes a release on GitHub, with the extension zip attached, as soon as
 it's pushed to `main` with the matching `version` in `extension/manifest.json`.
 
+## 2.0.1
+
+- Captions are always turned on when you join a call: everything depends on them, so the
+  *Turn on captions automatically* switch is gone. To keep a call out of your transcripts,
+  **Pause** (in the popup or the in-call pill); while paused, captions aren't turned on.
+
 ## 2.0.0
 
 ### Now records Microsoft Teams and Zoom too, and is called Meeting Transcripts

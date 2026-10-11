@@ -166,7 +166,9 @@ names and settings.
 
 ### During a call
 
-Just join. The extension turns on captions and starts recording. The pill in the corner of
+Just join. The extension turns on captions and starts recording; there's nothing to set up.
+Don't want a call recorded? **Pause** first (popup or pill): while paused, captions aren't
+turned on and nothing is saved. The pill in the corner of
 the call and the badge on the toolbar icon tell you what's happening:
 
 | Badge | Pill | Meaning |
@@ -189,7 +191,6 @@ pop-up in the middle of your meeting.
 
 | Setting | What it does |
 |---|---|
-| Turn on captions automatically | Turns the call's captions on for you when you join |
 | Hide captions on screen | Keeps recording but hides the caption overlay |
 | Show indicator in calls | The *Recording captions* pill in the corner of the call |
 | Your name | Used instead of "You" in transcripts. Normally read from your account; set it to override |

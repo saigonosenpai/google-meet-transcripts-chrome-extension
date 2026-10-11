@@ -151,7 +151,7 @@ migrateFiles();
 
 const LIBRARY_FILE = FOLDER + "/library.json";
 const INTERIM_FILE = FOLDER + "/library (since reinstall).json";
-const BACKED_UP = ["autoCaptions", "hideCaptions", "myName", "autoSave", "showIndicator", "platforms", "nameMap"]; // not "paused": that's momentary
+const BACKED_UP = ["hideCaptions", "myName", "autoSave", "showIndicator", "platforms", "nameMap"]; // not "paused": that's momentary
 let libraryTimer = null;
 
 async function writeLibraryFile() {
