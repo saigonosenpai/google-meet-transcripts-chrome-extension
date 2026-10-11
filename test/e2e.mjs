@@ -100,6 +100,22 @@ assert.ok(!fs.existsSync(file.filename), "old file removed");
 assert.deepEqual(fs.readdirSync(path.dirname(renamed.filename)), [path.basename(renamed.filename)]);
 await v.screenshot({ path: shots + "/viewer.png" });
 
+// --- delete is immediate and undoable (no blocking confirm dialog) ---------------------------------
+const before = await sw.evaluate((k) => chrome.storage.local.get(k), ["meetings", "t:" + meta.id, "f:" + meta.id]);
+await v.click("#delete");
+await v.waitForSelector("#toast.show");
+assert.match(await v.textContent("#toastText"), /^Deleted “Weekly sync \(Q4\)”/);
+assert.equal((await sw.evaluate(() => chrome.storage.local.get("meetings"))).meetings[meta.id], undefined, "deleted");
+await v.click("#toastAction");
+await v.waitForFunction((id) => location.hash.includes(encodeURIComponent(id)), meta.id);
+await v.waitForSelector(".turn p");
+const after = await sw.evaluate((k) => chrome.storage.local.get(k), ["meetings", "t:" + meta.id, "f:" + meta.id]);
+assert.equal(after.meetings[meta.id].title, before.meetings[meta.id].title, "title restored");
+assert.deepEqual(after["t:" + meta.id], before["t:" + meta.id], "transcript restored");
+assert.deepEqual(after["f:" + meta.id], before["f:" + meta.id], "saved-file record restored");
+assert.equal(await v.textContent("#title"), "Weekly sync (Q4)");
+console.log("delete + undo: restored");
+
 const p = await ctx.newPage();
 await p.setViewportSize({ width: 340, height: 600 });
 await p.goto(`chrome-extension://${id}/popup.html`);

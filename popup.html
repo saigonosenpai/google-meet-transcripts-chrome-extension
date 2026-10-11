@@ -10,36 +10,50 @@
     <h1>Meet Transcripts</h1>
   </header>
 
-  <section id="status" class="card">
-    <div class="row"><span id="dot" class="dot"></span><strong id="state">Checking…</strong></div>
-    <p id="detail" class="muted"></p>
+  <section id="status" class="hero">
+    <div class="state-row"><span id="dot" class="dot"></span><strong id="state">Checking…</strong></div>
+    <p id="detail"></p>
     <div class="actions" id="meetActions" hidden>
-      <button id="pause"></button>
-      <button id="viewCurrent">View live transcript</button>
+      <button id="pause" class="btn"></button>
+      <button id="viewCurrent" class="btn tinted">View live transcript</button>
     </div>
   </section>
 
-  <section class="card settings">
-    <label><input type="checkbox" id="autoCaptions"> Turn on captions automatically</label>
-    <label><input type="checkbox" id="hideCaptions"> Hide the caption overlay while recording</label>
-    <label class="name">Your name <input type="text" id="myName" placeholder="from your Google account"></label>
+  <h2>Recording</h2>
+  <section class="group">
+    <label class="row">
+      <span>Turn on captions automatically</span>
+      <input type="checkbox" class="switch" id="autoCaptions">
+    </label>
+    <label class="row">
+      <span>Hide captions on screen</span>
+      <input type="checkbox" class="switch" id="hideCaptions">
+    </label>
+    <label class="row">
+      <span>Your name</span>
+      <input type="text" id="myName" placeholder="From your account">
+    </label>
   </section>
+  <p class="footnote">Captions only show for you; nobody else in the call is notified.</p>
 
-  <section class="card files">
-    <div class="row"><svg class="gicon" viewBox="0 0 24 24" aria-hidden="true"><path fill="#2b579a" d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path fill="#a5bde3" d="M14 2v6h6z"/><path fill="#fff" d="M7.5 11h1.6l.9 4.2 1.1-4.2h1.3l1.1 4.2.9-4.2h1.6l-1.7 6.5h-1.4l-1.1-4.1-1.1 4.1H9.2z"/></svg>
-      <strong>Word documents</strong></div>
-    <label><input type="checkbox" id="autoSave"> Save each call as a .docx</label>
-    <p class="muted small">Saved to <code>Downloads/Meet Transcripts</code>, a folder per day.
-      Opens in Word, Pages or Google Docs.</p>
-    <p id="lastSaved" class="muted small"></p>
-    <div id="askWarning" class="warn small" hidden>
-      Chrome is set to ask where to save each file, so transcripts can't save automatically.
-      <button id="dlSettings" class="link">Change this setting</button>
-    </div>
-    <button id="showFolder">Show folder</button>
+  <h2>Word documents</h2>
+  <section class="group">
+    <label class="row">
+      <span>Save each call as a .docx</span>
+      <input type="checkbox" class="switch" id="autoSave">
+    </label>
+    <button id="showFolder" class="row nav">
+      <span>Show folder</span>
+      <svg viewBox="0 0 16 16" aria-hidden="true"><path d="m6 3.5 4.5 4.5L6 12.5"/></svg>
+    </button>
   </section>
+  <div id="askWarning" class="warning" hidden>
+    Chrome asks where to save each file, so transcripts can't save on their own.
+    <button id="dlSettings" class="link">Change this setting</button>
+  </div>
+  <p class="footnote">In Downloads › Meet Transcripts, a folder per day. <span id="lastSaved"></span></p>
 
-  <button id="openViewer" class="primary">All transcripts</button>
+  <button id="openViewer" class="btn filled">All Transcripts</button>
 
   <script src="shared.js"></script>
   <script src="popup.js"></script>

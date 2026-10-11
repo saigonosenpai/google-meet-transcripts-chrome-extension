@@ -55,7 +55,8 @@ async function latestFile() {
 
 async function renderFiles() {
   const f = await latestFile();
-  $("lastSaved").textContent = f ? "Last saved: " + f.filename.split(/[\\/]/).pop() : "";
+  const name = f ? f.filename.split(/[\\/]/).pop().replace(/^\d{4}-\d{2}-\d{2} - /, "").replace(/\.docx$/, "") : "";
+  $("lastSaved").textContent = name ? `Last saved: ${name}.` : "";
   const blocked = (await fileRecords()).some((r) => r.error && r.askSetting);
   $("askWarning").hidden = !blocked;
 }

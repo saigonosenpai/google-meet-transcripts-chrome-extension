@@ -9,51 +9,73 @@
 </head>
 <body>
   <aside>
-    <div class="brand"><img src="icons/icon32.png" alt=""> Meet Transcripts</div>
-    <input id="libSearch" type="search" placeholder="Search all meetings">
+    <div class="brand"><img src="icons/icon32.png" alt=""> Transcripts</div>
+    <label class="search">
+      <svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="7" cy="7" r="5"/><path d="m11 11 3.5 3.5"/></svg>
+      <input id="libSearch" type="search" placeholder="Search all meetings" aria-label="Search all meetings">
+    </label>
     <ul id="list"></ul>
-    <p id="emptyLib" class="empty" hidden>No transcripts yet. Join a Google Meet call with captions on and it will show up here.</p>
+    <div id="emptyLib" class="empty-state" hidden>
+      <strong>No transcripts yet</strong>
+      Join a Google Meet call with captions on, and it shows up here as you talk.
+    </div>
   </aside>
 
   <main>
-    <div id="placeholder" class="empty big">Pick a meeting on the left.</div>
+    <div id="placeholder" class="empty-state center">
+      <strong>Pick a meeting</strong>
+      Choose a transcript on the left to read it.
+    </div>
     <article id="meeting" hidden>
       <header>
+        <p id="meta" class="eyebrow"></p>
         <h1 id="title" contenteditable="plaintext-only" spellcheck="false" title="Click to rename"></h1>
-        <p id="meta" class="muted"></p>
         <div id="speakers" class="speakers"></div>
         <div id="file" class="file"></div>
       </header>
 
       <div class="toolbar">
-        <input id="search" type="search" placeholder="Find in transcript">
-        <div class="chips" id="filters">
-          <button data-filter="all" class="on">Everything</button>
-          <button data-filter="questions">Questions</button>
-          <button data-filter="actions">Action items</button>
-          <button data-filter="decisions">Decisions</button>
+        <div class="segmented" id="filters" role="group" aria-label="Show">
+          <span class="thumb" aria-hidden="true"></span>
+          <button data-filter="all" class="on" aria-pressed="true">Everything</button>
+          <button data-filter="questions" aria-pressed="false">Questions</button>
+          <button data-filter="actions" aria-pressed="false">Action items</button>
+          <button data-filter="decisions" aria-pressed="false">Decisions</button>
         </div>
         <div class="spacer"></div>
-        <button id="copyAI" title="Copies the transcript with a summarization prompt for any AI chat">Copy for AI summary</button>
+        <label class="search compact">
+          <svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="7" cy="7" r="5"/><path d="m11 11 3.5 3.5"/></svg>
+          <input id="search" type="search" placeholder="Find" aria-label="Find in transcript">
+        </label>
+        <button id="copyAI" class="btn" title="Copies the transcript with a summarization prompt for any AI chat">
+          <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 1.5 9.4 5.6 13.5 7 9.4 8.4 8 12.5 6.6 8.4 2.5 7l4.1-1.4z"/></svg>
+          Copy for AI
+        </button>
         <div class="menu">
-          <button id="exportBtn">Export ▾</button>
-          <div id="exportMenu" class="menu-list" hidden>
-            <button data-export="docx">Word (.docx)</button>
-            <button data-export="md">Markdown (.md)</button>
-            <button data-export="txt">Plain text (.txt)</button>
-            <button data-export="json">JSON (.json)</button>
-            <button data-export="copy">Copy text</button>
+          <button id="exportBtn" class="btn" aria-haspopup="menu" aria-expanded="false">
+            Export
+            <svg class="chev" viewBox="0 0 16 16" aria-hidden="true"><path d="m4 6 4 4 4-4"/></svg>
+          </button>
+          <div id="exportMenu" class="popover" role="menu">
+            <button data-export="docx" role="menuitem">Word document<span>.docx</span></button>
+            <button data-export="md" role="menuitem">Markdown<span>.md</span></button>
+            <button data-export="txt" role="menuitem">Plain text<span>.txt</span></button>
+            <button data-export="json" role="menuitem">JSON<span>.json</span></button>
+            <hr>
+            <button data-export="copy" role="menuitem">Copy transcript</button>
           </div>
         </div>
-        <button id="delete" class="danger" title="Delete this transcript">Delete</button>
+        <button id="delete" class="btn icon danger" title="Delete transcript" aria-label="Delete transcript">
+          <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3 4.5h10M6.5 4.5V3h3v1.5M4.5 4.5l.6 8.5h5.8l.6-8.5"/></svg>
+        </button>
       </div>
 
-      <p id="filterNote" class="muted" hidden></p>
+      <p id="filterNote" class="note" hidden></p>
       <div id="transcript"></div>
     </article>
   </main>
 
-  <div id="toast" hidden></div>
+  <div id="toast" role="status" aria-live="polite"><span id="toastText"></span><button id="toastAction" hidden></button></div>
   <script src="shared.js"></script>
   <script src="docx.js"></script>
   <script src="viewer.js"></script>

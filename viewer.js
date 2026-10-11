@@ -1,5 +1,6 @@
 const $ = (id) => document.getElementById(id);
-const COLORS = ["#1a73e8", "#d93025", "#188038", "#e37400", "#9334e6", "#007b83", "#c5221f", "#b06000"];
+// Apple system colors, readable behind white initials in light and dark.
+const COLORS = ["#007aff", "#ff9500", "#34c759", "#af52de", "#ff2d55", "#5ac8fa", "#a2845e", "#5856d6"];
 
 let meetings = [];
 let current = null;   // meeting meta
@@ -18,12 +19,29 @@ function highlight(text) {
   return safe.replace(re, (m) => `<mark>${m}</mark>`);
 }
 
-function toast(msg) {
-  const t = $("toast");
-  t.textContent = msg;
-  t.hidden = false;
+const initials = (name) =>
+  name.split(/\s+/).filter(Boolean).slice(0, 2).map((w) => w[0]).join("").toUpperCase() || "?";
+
+const avatar = (name, color) => `<span class="avatar" style="--c:${color}">${esc(initials(name))}</span>`;
+
+// A toast that rises from the bottom; with `action`, it offers one button (e.g. Undo) and stays longer.
+function toast(msg, action) {
+  const t = $("toast"), btn = $("toastAction");
+  $("toastText").textContent = msg;
+  btn.hidden = !action;
+  btn.onclick = null;
+  if (action) {
+    btn.textContent = action.label;
+    btn.onclick = () => { hideToast(); action.run(); };
+  }
+  t.classList.add("show");
   clearTimeout(toast.timer);
-  toast.timer = setTimeout(() => (t.hidden = true), 1800);
+  toast.timer = setTimeout(hideToast, action ? 6000 : 2200);
+}
+
+function hideToast() {
+  clearTimeout(toast.timer);
+  $("toast").classList.remove("show");
 }
 
 // --- library ------------------------------------------------------------------------------
@@ -63,13 +81,15 @@ function renderList() {
     const li = document.createElement("li");
     li.className = current && current.id === m.id ? "on" : "";
     const time = new Date(m.startedAt).toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
+    li.tabIndex = 0;
     li.innerHTML = `<div class="t"></div><div class="s"></div>`;
     li.querySelector(".t").textContent = MT.title(m);
     li.querySelector(".s").textContent = `${time} · ${MT.duration(m)} · ${(m.speakers || []).length} speaker${(m.speakers || []).length === 1 ? "" : "s"}`;
     li.addEventListener("click", () => { location.hash = encodeURIComponent(m.id); });
+    li.addEventListener("keydown", (e) => { if (e.key === "Enter") location.hash = encodeURIComponent(m.id); });
     list.append(li);
   }
-  if (q && !shown.length) list.innerHTML = `<li class="day">No matches</li>`;
+  if (q && !shown.length) list.innerHTML = `<li class="day">No meetings match</li>`;
 }
 
 // --- one meeting --------------------------------------------------------------------------
@@ -82,8 +102,13 @@ async function openMeeting(id) {
   if (!current) return;
   entries = await MT.getTranscript(id);
   document.title = MT.title(current) + " · Meet Transcripts";
+  // Turns rise in when a meeting opens, not on every live update.
+  const list = $("transcript");
+  list.classList.add("entering");
+  setTimeout(() => list.classList.remove("entering"), 400);
   renderMeeting();
   document.querySelector("main").scrollTo(0, 0);
+  requestAnimationFrame(placeThumb);
 }
 
 function speakerColors() {
@@ -95,7 +120,7 @@ function speakerColors() {
 function renderMeeting() {
   const colors = speakerColors();
   $("title").textContent = MT.title(current);
-  $("meta").textContent = `${MT.dateTime(current.startedAt)} · ${MT.duration(current)} · ${entries.length} lines`;
+  $("meta").textContent = `${MT.dateTime(current.startedAt)} · ${MT.duration(current)}`;
 
   // Talk share by word count.
   const wordsBy = {};
@@ -107,28 +132,37 @@ function renderMeeting() {
   }
   $("speakers").innerHTML = Object.entries(wordsBy).sort((a, b) => b[1] - a[1]).map(([s, n]) => {
     const pct = Math.round((n / total) * 100);
-    return `<span class="spk"><b style="color:${colors[s] || COLORS[0]}">${esc(s)}</b>` +
-      `<span class="bar"><i style="width:${pct}%;background:${colors[s] || COLORS[0]}"></i></span>` +
-      `<span class="pct">${pct}%</span></span>`;
+    return `<span class="spk" title="${esc(s)} spoke ${pct}% of the words">${avatar(s, colors[s] || COLORS[0])}` +
+      `${esc(s)}<span class="pct">${pct}%</span></span>`;
   }).join("");
 
   renderTranscript();
   renderFile();
 }
 
+const DOC_ICON = `<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M9.5 1.5h-5a1 1 0 0 0-1 1v11a1 1 0 0 0 1 1h7a1 1 0 0 0 1-1V4.5z"/><path d="M9.5 1.5v3h3M5.5 8.5h5M5.5 11h5"/></svg>`;
+
+function savedWhen(ts) {
+  const mins = Math.round((Date.now() - ts) / 60000);
+  if (mins < 1) return "just now";
+  if (mins < 60) return `${mins} min ago`;
+  return new Date(ts).toLocaleString(undefined, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
+}
+
 async function renderFile() {
   const f = await MT.getFile(current.id);
   let html = "";
   if (f && f.downloadId) {
-    html += `<span>Saved as <b>${esc(f.filename.split(/[\\/]/).pop())}</b></span>` +
-      `<span class="muted">${esc(new Date(f.savedAt).toLocaleString())}</span>` +
-      `<button id="showFile">Show in folder</button>`;
+    const name = f.filename.split(/[\\/]/).pop();
+    html += `<span class="doc" title="${esc(f.filename)}">${DOC_ICON}<span>Saved as <b>${esc(name)}</b></span></span>` +
+      `<span class="sep">·</span><span>${esc(savedWhen(f.savedAt))}</span>` +
+      `<button id="showFile" class="btn link">Show in folder</button>`;
   } else {
-    html += `<span class="muted">Not saved as a Word file yet</span>`;
+    html += `<span class="doc">${DOC_ICON}<span>Not saved as a Word document yet</span></span>`;
   }
-  html += `<button id="saveNow">${f && f.downloadId ? "Save again" : "Save .docx"}</button>`;
+  html += `<button id="saveNow" class="btn link">${f && f.downloadId ? "Save again" : "Save .docx"}</button>`;
   if (f && f.error) html += `<span class="err">${esc(f.error)}</span>`;
-  if (f && f.error && f.askSetting) html += `<button id="dlSettings">Open Chrome download settings</button>`;
+  if (f && f.error && f.askSetting) html += `<button id="dlSettings" class="btn link">Open Chrome download settings</button>`;
   $("file").innerHTML = html;
   if ($("dlSettings")) $("dlSettings").addEventListener("click", () =>
     chrome.runtime.sendMessage({ type: "openDownloadSettings" }));
@@ -158,16 +192,20 @@ function renderTranscript() {
 
   const note = $("filterNote");
   note.hidden = filter === "all" && !q;
-  note.textContent = `${turns.length} ${filter === "all" ? "matching turn" + (turns.length === 1 ? "" : "s") : MT.FILTERS[filter].label.toLowerCase()}` +
-    (filter !== "all" ? " (found by keywords — skim for context)" : "");
+  note.textContent = filter === "all"
+    ? `${turns.length} matching turn${turns.length === 1 ? "" : "s"}`
+    : `${turns.length} ${MT.FILTERS[filter].label.toLowerCase()} · picked out by keywords, so skim them in context`;
 
   const recent = Date.now() - current.endedAt < 15_000;
   $("transcript").innerHTML = turns.map((t, i) => {
-    const live = recent && i === turns.length - 1 && filter === "all" && !q ? " live" : "";
-    return `<div class="turn${live}"><time title="${esc(new Date(t.ts).toLocaleTimeString())}">${MT.clock(t.ts - current.startedAt)}</time>` +
-      `<div><div class="who" style="color:${colors[t.speaker] || COLORS[0]}">${esc(t.speaker)}</div>` +
+    const isLive = recent && i === turns.length - 1 && filter === "all" && !q;
+    return `<div class="turn">${avatar(t.speaker, colors[t.speaker] || COLORS[0])}<div>` +
+      `<div class="head"><span class="who">${esc(t.speaker)}</span>` +
+      `<time title="${esc(new Date(t.ts).toLocaleTimeString())}">${MT.clock(t.ts - current.startedAt)}</time>` +
+      `${isLive ? '<span class="live-pill">Live</span>' : ""}</div>` +
       `<p>${highlight(t.lines.map((l) => l.text).join(" "))}</p></div></div>`;
-  }).join("") || `<p class="empty">Nothing here.</p>`;
+  }).join("") || `<div class="empty-state"><strong>Nothing here</strong>${
+    q ? "No lines match your search." : "No sentences matched this filter."}</div>`;
 }
 
 // --- actions ------------------------------------------------------------------------------
@@ -196,15 +234,40 @@ const AI_PROMPT = `Below is a transcript of a Google Meet call, generated from l
 
 `;
 
+// Slides the segmented control's thumb under the selected option.
+function placeThumb() {
+  const on = $("filters").querySelector("button.on");
+  const thumb = $("filters").querySelector(".thumb");
+  if (!on || !on.offsetWidth) return;
+  thumb.style.width = on.offsetWidth + "px";
+  thumb.style.transform = `translateX(${on.offsetLeft}px)`;
+}
+
+function setMenu(open) {
+  $("exportMenu").classList.toggle("open", open);
+  $("exportBtn").setAttribute("aria-expanded", String(open));
+}
+
 function bindActions() {
   $("search").addEventListener("input", (e) => { query = e.target.value.trim(); renderTranscript(); });
-  $("filters").addEventListener("click", (e) => {
+  $("filters").addEventListener("pointerdown", (e) => {
+    // Select on press: the thumb starts moving the moment the finger lands.
     const b = e.target.closest("button");
-    if (!b) return;
+    if (!b || b.classList.contains("on")) return;
     filter = b.dataset.filter;
-    for (const x of $("filters").children) x.classList.toggle("on", x === b);
+    for (const x of $("filters").querySelectorAll("button")) {
+      x.classList.toggle("on", x === b);
+      x.setAttribute("aria-pressed", String(x === b));
+    }
+    placeThumb();
     renderTranscript();
   });
+  $("filters").addEventListener("keydown", (e) => {
+    if (e.key === "Enter" || e.key === " ") e.target.closest("button")?.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true }));
+  });
+  window.addEventListener("resize", placeThumb);
+  document.querySelector("main").addEventListener("scroll", (e) =>
+    e.target.classList.toggle("scrolled", e.target.scrollTop > 8), { passive: true });
 
   $("title").addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); e.target.blur(); } });
   $("title").addEventListener("blur", async (e) => {
@@ -218,10 +281,15 @@ function bindActions() {
 
   $("copyAI").addEventListener("click", () => copy(AI_PROMPT + MT.toText(current, entries), "Copied — paste into your AI chat"));
 
-  $("exportBtn").addEventListener("click", (e) => { e.stopPropagation(); $("exportMenu").hidden = !$("exportMenu").hidden; });
-  document.addEventListener("click", () => ($("exportMenu").hidden = true));
+  $("exportBtn").addEventListener("click", (e) => {
+    e.stopPropagation();
+    setMenu(!$("exportMenu").classList.contains("open"));
+  });
+  document.addEventListener("click", () => setMenu(false));
+  document.addEventListener("keydown", (e) => { if (e.key === "Escape") setMenu(false); });
   $("exportMenu").addEventListener("click", (e) => {
-    const kind = e.target.dataset.export;
+    const kind = e.target.closest("button")?.dataset.export;
+    setMenu(false);
     if (kind === "docx") download(fileBase() + ".docx", DOCX.build(MT.docBlocks(current, entries)), DOCX.MIME);
     if (kind === "md") download(fileBase() + ".md", MT.toMarkdown(current, entries), "text/markdown");
     if (kind === "txt") download(fileBase() + ".txt", MT.toText(current, entries), "text/plain");
@@ -229,10 +297,20 @@ function bindActions() {
     if (kind === "copy") copy(MT.toText(current, entries), "Transcript copied");
   });
 
+  // Delete at once, with Undo, instead of a blocking "are you sure?" dialog.
   $("delete").addEventListener("click", async () => {
-    if (!confirm(`Delete “${MT.title(current)}”? This can't be undone.`)) return;
-    await MT.deleteMeeting(current.id);
+    const meta = current, lines = entries, file = await MT.getFile(meta.id);
+    await MT.deleteMeeting(meta.id);
     location.hash = "";
+    toast(`Deleted “${MT.title(meta)}”`, {
+      label: "Undo",
+      run: async () => {
+        await MT.saveMeeting(meta, lines);
+        if (meta.renamed) await MT.updateMeeting(meta.id, { title: meta.title, renamed: true });
+        if (file) await MT.setFile(meta.id, file);
+        location.hash = encodeURIComponent(meta.id);
+      },
+    });
   });
 
   let libTimer;
