@@ -1,13 +1,18 @@
 <!doctype html>
-<html><head><title>Meet - Weekly sync</title></head>
+<html><head><title>Meet</title></head>
 <body>
 <!-- Mimics Meet's caption DOM: one block per speaker turn, text revised in place. -->
+<!-- Account button from the "Ready to join?" screen; the extension reads your name from it. -->
+<a aria-label="Google Account: Sam Lee  (sam@example.com)" href="#">S</a>
 <button aria-label="Turn on captions (c)" aria-pressed="false" id="cc">CC</button>
 <div data-participant-id="p1"><div class="zWGUib">Alice</div></div>
 <div data-participant-id="p2"><div class="zWGUib">Bob</div></div>
 <div data-participant-id="p3"><div class="zWGUib">Carol</div></div>
-<div data-participant-id="p4"><div data-self-name="You" class="zWGUib">You</div></div>
+<div data-participant-id="p4"><div data-self-name="You" class="zWGUib notranslate">You</div></div>
 <script>
+// Calendar meetings show their title in the tab; spontaneous calls show only the code.
+const scheduled = location.pathname === "/abc-defg-hij";
+document.title = scheduled ? "Meet - Weekly sync" : "Meet - " + location.pathname.slice(1);
 let region = null;
 document.getElementById("cc").onclick = (e) => {
   e.target.setAttribute("aria-pressed", "true");
@@ -46,7 +51,6 @@ async function run() {
   region.firstElementChild.remove(); // old blocks scroll away
   t = block("Alice");
   t.textContent = "Great, thanks everyone.";
-  document.title = "Meet - Weekly sync";
   window.done = true;
 }
 // Leaving the call: Meet swaps the call UI for a "You left the meeting" screen.

@@ -1,7 +1,8 @@
 # Meet Transcripts
 
 A Chrome extension that records your Google Meet calls as text transcripts and saves each
-call as a **Word document (.docx)**, so you can read, search and reference them later.
+call as a **Word document (.docx)**, grouped in a folder per day, so you can read, search
+and reference them later.
 Works on **macOS and Windows** (and Linux): anywhere desktop Chrome runs.
 
 It works from Meet's own **live captions**: no audio recording, no account, no sign-in,
@@ -9,21 +10,39 @@ nothing sent anywhere. Each call is saved to your Downloads folder:
 
 ```
 Downloads/Meet Transcripts/
-  2026-10-11 - Weekly sync - Alice, Bob, Carol, Sam.docx
-  2026-10-12 - Design review - Dana, Eli, Sam +3.docx
+  2026-10-11/
+    2026-10-11 - Weekly sync - Alice, Bob, Carol, Sam Lee.docx
+    2026-10-11 - Call with Alice, Bob.docx
+    2026-10-11 - Call with Alice, Bob (2).docx
+  2026-10-12/
+    2026-10-12 - Design review - Dana, Eli, Sam Lee +3.docx
+    2026-10-12 - Call with Dana.docx
 ```
 
 On a Mac that's `~/Downloads/Meet Transcripts/`, on Windows
 `C:\Users\<you>\Downloads\Meet Transcripts\`. The files open in Word, Pages, Google Docs
 or LibreOffice.
 
-The name is `Date - Event name - Participants`:
+How a call is named depends on what kind of call it was:
 
-- **Date**: the day the call started (`YYYY-MM-DD`, so files sort by date).
-- **Event name**: the Meet / Calendar event title. Rename the meeting in the transcript
-  viewer and the file is renamed too.
+- **Scheduled meetings** (a Calendar event with a title):
+  `Date - Event name - Participants`, e.g. `2026-10-11 - Weekly sync - Alice, Bob, Sam Lee`.
+- **Spontaneous calls** (a link someone shared, "Start an instant meeting", no title):
+  `Date - Call with <everyone else who joined>`, e.g. `2026-10-11 - Call with Alice, Bob`.
+  The name updates as people join. If nobody else joins it's `Solo call`.
+
+Details:
+
+- **Date**: the day the call started (`YYYY-MM-DD`, so files sort by date). Each day gets
+  its own folder.
 - **Participants**: everyone seen in the call plus everyone who spoke; more than four
   are shortened to `+N`.
+- **You**: Meet labels your own speech "You". The extension uses the name on your Google
+  account instead (read from Meet's "Ready to join?" screen), or the name you set in the
+  popup.
+- Two calls that would get the same name on the same day (say, two calls with the same
+  people) are kept apart as `… (2)`, `… (3)`.
+- Renaming a meeting in the transcript viewer renames its file too.
 
 Characters that aren't allowed in file names on macOS or Windows (`: / \ * ? " < > |`)
 are replaced with spaces.
@@ -40,6 +59,11 @@ transcript with timestamps.
 4. Pin the extension (puzzle-piece icon → pin) so you can see its badge.
 
 Same steps on Mac and Windows. Other Chromium browsers (Edge, Brave, Arc) work too.
+
+**Updating to a new version:** replace the folder's files and click the reload arrow (↻) on
+the extension in `chrome://extensions`. Don't remove the extension first: removing it
+deletes your recorded transcripts from Chrome (the saved .docx files stay). Existing files
+are renamed and moved to the current layout automatically.
 
 ## Use it
 
@@ -62,8 +86,7 @@ settings:
 
 - **Turn on captions automatically**: clicks Meet's caption button when you join.
 - **Hide the caption overlay**: keeps recording but makes the captions on screen invisible.
-- **Your name**: Meet labels your own speech "You"; this replaces it with your name, in
-  the transcript and in file names.
+- **Your name**: normally taken from your Google account; set it here to override.
 - **Save each call as a .docx**: turn automatic saving on or off.
 
 Chrome's **Ask where to save each file before downloading** setting (off by default)

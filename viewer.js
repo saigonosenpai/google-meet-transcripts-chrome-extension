@@ -37,7 +37,7 @@ async function buildIndex() {
   const all = await chrome.storage.local.get(null);
   libIndex = {};
   for (const m of meetings) {
-    libIndex[m.id] = (m.title + " " + (m.speakers || []).join(" ") + " " +
+    libIndex[m.id] = (MT.title(m) + " " + (m.speakers || []).join(" ") + " " +
       (all["t:" + m.id] || []).map((e) => e.text).join(" ")).toLowerCase();
   }
 }
@@ -47,7 +47,7 @@ function renderList() {
   const q = libQuery.toLowerCase();
   const shown = meetings.filter((m) => !q || (libIndex && libIndex[m.id]
     ? libIndex[m.id].includes(q)
-    : (m.title + " " + (m.speakers || []).join(" ")).toLowerCase().includes(q)));
+    : (MT.title(m) + " " + (m.speakers || []).join(" ")).toLowerCase().includes(q)));
   $("emptyLib").hidden = meetings.length > 0;
   let lastDay = "";
   list.innerHTML = "";
@@ -64,7 +64,7 @@ function renderList() {
     li.className = current && current.id === m.id ? "on" : "";
     const time = new Date(m.startedAt).toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
     li.innerHTML = `<div class="t"></div><div class="s"></div>`;
-    li.querySelector(".t").textContent = m.title;
+    li.querySelector(".t").textContent = MT.title(m);
     li.querySelector(".s").textContent = `${time} · ${MT.duration(m)} · ${(m.speakers || []).length} speaker${(m.speakers || []).length === 1 ? "" : "s"}`;
     li.addEventListener("click", () => { location.hash = encodeURIComponent(m.id); });
     list.append(li);
@@ -81,7 +81,7 @@ async function openMeeting(id) {
   renderList();
   if (!current) return;
   entries = await MT.getTranscript(id);
-  document.title = current.title + " · Meet Transcripts";
+  document.title = MT.title(current) + " · Meet Transcripts";
   renderMeeting();
   document.querySelector("main").scrollTo(0, 0);
 }
@@ -94,7 +94,7 @@ function speakerColors() {
 
 function renderMeeting() {
   const colors = speakerColors();
-  $("title").textContent = current.title;
+  $("title").textContent = MT.title(current);
   $("meta").textContent = `${MT.dateTime(current.startedAt)} · ${MT.duration(current)} · ${entries.length} lines`;
 
   // Talk share by word count.
@@ -209,7 +209,8 @@ function bindActions() {
   $("title").addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); e.target.blur(); } });
   $("title").addEventListener("blur", async (e) => {
     const title = e.target.textContent.trim();
-    if (!title || title === current.title) { e.target.textContent = current.title; return; }
+    if (!title || title === MT.title(current)) { e.target.textContent = MT.title(current); return; }
+    current.renamed = true;
     current.title = title;
     await MT.updateMeeting(current.id, { title, renamed: true });
     toast("Renamed");
@@ -229,7 +230,7 @@ function bindActions() {
   });
 
   $("delete").addEventListener("click", async () => {
-    if (!confirm(`Delete “${current.title}”? This can't be undone.`)) return;
+    if (!confirm(`Delete “${MT.title(current)}”? This can't be undone.`)) return;
     await MT.deleteMeeting(current.id);
     location.hash = "";
   });

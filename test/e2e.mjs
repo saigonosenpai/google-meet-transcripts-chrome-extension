@@ -46,9 +46,13 @@ const id = [...createHash("sha256").update(key).digest("hex").slice(0, 32)]
   .map((c) => String.fromCharCode(97 + parseInt(c, 16))).join("");
 const sw = await ctx.newPage();
 await sw.goto(`chrome-extension://${id}/viewer.html`);
-await sw.evaluate(() => chrome.storage.local.set({ settings: { myName: "Sam" } }));
+const today = new Date(); const pad = (n) => String(n).padStart(2, "0");
+const date = `${today.getFullYear()}-${pad(today.getMonth() + 1)}-${pad(today.getDate())}`;
+const dayDir = path.join(downloads, "Meet Transcripts", date);
+const fileOf = (mid) => sw.evaluate((k) => chrome.storage.local.get(k).then((d) => d[k]), "f:" + mid);
 
-// --- the call ---------------------------------------------------------------------------------
+// --- a scheduled call ("Weekly sync") ---------------------------------------------------------
+// No name configured: "You" in captions must become the Google account name, "Sam Lee".
 const page = await ctx.newPage();
 await page.goto("https://meet.google.com/abc-defg-hij");
 await page.waitForFunction(() => window.done, null, { timeout: 30000 });
@@ -59,20 +63,20 @@ const t = data["t:" + meta.id];
 console.log("meeting:", JSON.stringify({ title: meta.title, participants: meta.participants, speakers: meta.speakers }));
 const bob = t.filter((e) => e.speaker === "Bob").map((e) => e.text).join(" ");
 for (let i = 1; i <= 30; i++) assert.equal(bob.split(`Sentence number ${i} `).length, 2, `sentence ${i} once`);
-assert.deepEqual(meta.speakers, ["Alice", "Sam", "Bob"]);
+assert.deepEqual(meta.speakers, ["Alice", "Sam Lee", "Bob"]);
+assert.equal(meta.title, "Weekly sync");
 assert.equal(data["f:" + meta.id], undefined, "nothing saved mid-call");
 
 // Leave the call -> the .docx is saved.
 await page.evaluate(() => window.leave());
-const fileState = () => sw.evaluate((k) => chrome.storage.local.get(k).then((d) => d[k]), "f:" + meta.id);
+const fileState = () => fileOf(meta.id);
 let file;
 for (let i = 0; i < 40 && !(file = await fileState()); i++) await page.waitForTimeout(250);
 assert.ok(file && !file.error, "saved after leaving: " + JSON.stringify(file));
-const today = new Date(); const pad = (n) => String(n).padStart(2, "0");
-const expected = `${today.getFullYear()}-${pad(today.getMonth() + 1)}-${pad(today.getDate())} - Weekly sync - Alice, Bob, Carol, Sam.docx`;
+const expected = `${date} - Weekly sync - Alice, Bob, Carol, Sam Lee.docx`;
 console.log("saved:", file.filename);
 assert.equal(path.basename(file.filename), expected);
-assert.equal(path.dirname(file.filename), path.join(downloads, "Meet Transcripts"));
+assert.equal(path.dirname(file.filename), dayDir, "grouped in a folder per day");
 assert.ok(fs.existsSync(file.filename));
 fs.copyFileSync(file.filename, shots + "/saved.docx");
 
@@ -102,6 +106,39 @@ await p.goto(`chrome-extension://${id}/popup.html`);
 await p.waitForTimeout(500);
 assert.ok((await p.textContent("#lastSaved")).includes("(Q4)"));
 await p.screenshot({ path: shots + "/popup.png" });
+
+// --- spontaneous calls: named after who else joined ---------------------------------------------
+async function runCall(code) {
+  const pg = await ctx.newPage();
+  await pg.goto("https://meet.google.com/" + code);
+  await pg.waitForFunction(() => window.done, null, { timeout: 30000 });
+  await pg.waitForTimeout(2000);
+  await pg.evaluate(() => window.leave());
+  const { meetings } = await sw.evaluate(() => chrome.storage.local.get("meetings"));
+  const m = Object.values(meetings).find((x) => x.code === code);
+  let f;
+  for (let i = 0; i < 40 && !(f = await fileOf(m.id)); i++) await pg.waitForTimeout(250);
+  await pg.close();
+  return { m, f };
+}
+const call1 = await runCall("xtk-wiod-gkq");
+console.log("spontaneous:", call1.m.title, "->", path.basename(call1.f.filename));
+assert.equal(call1.m.title, "Call with Alice, Bob, Carol");
+assert.equal(call1.f.filename, path.join(dayDir, `${date} - Call with Alice, Bob, Carol.docx`));
+// Same people again the same day: a second file, not an overwrite.
+const call2 = await runCall("pqr-stuv-wxy");
+console.log("second call, same people:", path.basename(call2.f.filename));
+assert.equal(call2.f.filename, path.join(dayDir, `${date} - Call with Alice, Bob, Carol (2).docx`));
+assert.equal(fs.readdirSync(dayDir).length, 3);
+
+// Recordings from before this version stored "Meet <code>" for untitled calls.
+assert.equal(await sw.evaluate(() => MT.title({ title: "Meet xtk-wiod-gkq", speakers: ["You"] })), "Solo call");
+assert.equal(await sw.evaluate(() => MT.title({ title: "Meet xtk-wiod-gkq", speakers: ["Ann", "You"] })), "Call with Ann");
+assert.equal(await sw.evaluate(() => MT.title({ title: "Weekly sync", speakers: ["Ann"] })), "Weekly sync");
+
+await v.goto(`chrome-extension://${id}/viewer.html#` + encodeURIComponent(call1.m.id));
+await v.waitForSelector("#showFile");
+await v.screenshot({ path: shots + "/viewer-list.png" });
 
 await close();
 

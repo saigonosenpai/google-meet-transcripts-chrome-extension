@@ -18,10 +18,10 @@ function setBadge(tabId, msg) {
 
 // --- saving .docx files -------------------------------------------------------------------
 //
-// Files go to <Downloads>/Meet Transcripts/ through chrome.downloads, which needs no folder
-// permission and works from this service worker. A later save of the same meeting
-// overwrites its file; if the name changed (renamed, more participants), the old file is
-// deleted so each meeting has exactly one document.
+// Files go to <Downloads>/Meet Transcripts/<YYYY-MM-DD>/ through chrome.downloads, which
+// needs no folder permission and works from this service worker. A later save of the same
+// meeting overwrites its file; if the name changed (renamed, more participants), the old
+// file is deleted so each meeting has exactly one document.
 
 const FOLDER = "Meet Transcripts";
 
@@ -47,6 +47,21 @@ function waitForDownload(downloadId) {
   });
 }
 
+const norm = (p) => p.replace(/\\/g, "/");
+
+// "Meet Transcripts/2026-10-11/<name>.docx", adding " (2)", " (3)"… if another meeting
+// (say, a second call with the same people that day) already has that name.
+async function uniquePath(id, day, base) {
+  const all = await chrome.storage.local.get(null);
+  const taken = Object.entries(all)
+    .filter(([k, f]) => k.startsWith("f:") && k !== "f:" + id && f && f.filename)
+    .map(([, f]) => norm(f.filename).toLowerCase());
+  for (let n = 1; ; n++) {
+    const rel = `${FOLDER}/${day}/${base}${n > 1 ? ` (${n})` : ""}.docx`;
+    if (!taken.some((f) => f.endsWith("/" + rel.toLowerCase()))) return rel;
+  }
+}
+
 const saving = new Map(); // meeting id -> promise, so overlapping triggers share one save
 
 function saveDoc(id, opts = {}) {
@@ -61,15 +76,15 @@ async function doSave(id, { manual = false } = {}) {
   if (!meta || !entries.length) return null;
 
   const prev = (await MT.getFile(id)) || {};
-  const name = MT.docName(meta) + ".docx";
+  const rel = await uniquePath(id, MT.dayFolder(meta), MT.docName(meta));
   const blocks = MT.docBlocks(meta, entries);
-  const h = hash(name + JSON.stringify(blocks));
+  const h = hash(rel + JSON.stringify(blocks));
   if (prev.downloadId && prev.hash === h && !prev.error && !manual) return prev;
 
   try {
     if (prev.downloadId) {
       const [old] = await chrome.downloads.search({ id: prev.downloadId });
-      if (old && old.exists && !old.filename.endsWith(name)) await chrome.downloads.removeFile(old.id).catch(() => {});
+      if (old && old.exists && !norm(old.filename).endsWith("/" + rel)) await chrome.downloads.removeFile(old.id).catch(() => {});
       await chrome.downloads.erase({ id: prev.downloadId });
     }
     // Automatic saves happen mid-call; keep Chrome's download bubble out of the way.
@@ -78,7 +93,7 @@ async function doSave(id, { manual = false } = {}) {
     try {
       const downloadId = await chrome.downloads.download({
         url: DOCX.dataUrl(DOCX.build(blocks)),
-        filename: FOLDER + "/" + name,
+        filename: rel,
         conflictAction: "overwrite",
         saveAs: false,
       });
@@ -108,6 +123,20 @@ async function doSave(id, { manual = false } = {}) {
 // minutes without new captions (so a crash loses little). Later captions update the file.
 
 const IDLE_MIN = 2;
+
+// Files saved by older versions used other names/folders. Re-save them once in the current
+// layout. Runs whenever the worker starts, so it doesn't depend on Chrome reporting the update.
+const LAYOUT = 2; // 2: one folder per day, spontaneous calls named "Call with …"
+
+async function migrateFiles() {
+  const all = await chrome.storage.local.get(null);
+  if (all.fileLayout === LAYOUT) return;
+  for (const key of Object.keys(all)) {
+    if (key.startsWith("f:") && all[key].downloadId) await saveDoc(key.slice(2)).catch(() => {});
+  }
+  await chrome.storage.local.set({ fileLayout: LAYOUT });
+}
+migrateFiles();
 
 chrome.alarms.onAlarm.addListener((alarm) => {
   if (alarm.name.startsWith("save:")) saveDoc(alarm.name.slice(5)).catch(() => {});

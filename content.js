@@ -22,7 +22,10 @@
   const TEXT_SEL = ".ygicle, .bh44bd, .iTTPOb";
   // Participant names: video tiles, then the People panel.
   const TILE_SEL = "[data-participant-id]";
-  const TILE_NAME_SEL = "[data-self-name], .zWGUib, .XEazBc, .dwSJ2e";
+  const TILE_NAME_SEL = "[data-self-name], .zWGUib, .XEazBc, .dwSJ2e, .notranslate";
+  // Your own name: the account button on Meet's "Ready to join?" screen is labelled
+  // "Google Account: Jane Doe (jane@example.com)".
+  const ACCOUNT_SEL = '[aria-label^="Google Account:"]';
   const PEOPLE_SEL = '[role="list"][aria-label*="articipant" i] [role="listitem"][aria-label]';
   const ENDED_AFTER_TICKS = 3; // call UI gone this many polls in a row = user left the call
 
@@ -42,28 +45,44 @@
   let alive = true;
   let participants = new Set();
   let outOfCallTicks = 0;
+  let selfName = "";
 
   const meetingCode = () => (location.pathname.match(/^\/([a-z]{3,4}-[a-z]{4}-[a-z]{3,4})\b/) || [])[1] || null;
 
-  function meetingTitle() {
+  // The calendar event's title, or "" for a spontaneous call (Meet then shows just the code).
+  function eventTitle() {
     const el = document.querySelector("[data-meeting-title]");
     let t = el ? el.getAttribute("data-meeting-title") : "";
     if (!t) t = document.title.replace(/^\s*(Google\s+)?Meet\s*[-–—:|]\s*/i, "").trim();
-    return t && t !== code && !/^(google )?meet$/i.test(t) ? t : "Meet " + code;
+    return t && t !== code && !/^(google )?meet$/i.test(t) ? t : "";
+  }
+
+  const me = () => settings.myName || selfName;
+
+  function detectSelfName() {
+    const el = document.querySelector(ACCOUNT_SEL);
+    if (!el) return;
+    const name = el.getAttribute("aria-label").replace(/^Google Account:\s*/i, "").split(/\s*[(\n]/)[0].trim();
+    if (name && name !== selfName) {
+      selfName = name;
+      chrome.storage.local.set({ selfName }); // the account button isn't shown inside the call
+    }
   }
 
   function collectParticipants() {
     const add = (name) => {
       name = (name || "").split("\n")[0].trim();
-      if (!name || name.length > 60 || /^(you|unknown)$/i.test(name)) return;
+      if (!name || name.length > 60 || /^(you|unknown)$/i.test(name) || /^\(?you\)?$/i.test(name)) return;
       participants.add(name);
     };
     for (const tile of document.querySelectorAll(TILE_SEL)) {
       const el = tile.querySelector(TILE_NAME_SEL);
-      if (el) add(el.getAttribute("data-self-name") || el.textContent);
+      const self = tile.querySelector("[data-self-name]");
+      if (self || !el) continue; // your own tile is often labelled "You"; we add your real name below
+      add(el.textContent);
     }
-    for (const item of document.querySelectorAll(PEOPLE_SEL)) add(item.getAttribute("aria-label"));
-    if (settings.myName) add(settings.myName);
+    for (const item of document.querySelectorAll(PEOPLE_SEL)) add(item.getAttribute("aria-label").replace(/\s*\(you\)\s*$/i, ""));
+    if (me()) add(me());
   }
 
   // --- text stitching -------------------------------------------------------------------
@@ -119,7 +138,7 @@
     text = (text || "").replace(/\s+/g, " ").trim();
     speaker = (speaker || "").trim() || "Unknown";
     if (!text) return null;
-    if (settings.myName && /^you$/i.test(speaker)) speaker = settings.myName;
+    if (me() && /^you$/i.test(speaker)) speaker = me();
     return { speaker, text };
   }
 
@@ -181,7 +200,7 @@
           (m) => m.code === code && now - (m.endedAt || m.startedAt) < RESUME_WINDOW_MS);
         const meta = recent
           ? { ...recent }
-          : { id: code + "-" + now, code, title: meetingTitle(), startedAt: now, endedAt: now };
+          : { id: code + "-" + now, code, eventTitle: eventTitle(), startedAt: now, endedAt: now };
         const entries = recent ? await MT.getTranscript(recent.id) : [];
         session = { meta, entries };
         return session;
@@ -200,7 +219,8 @@
     clearTimeout(saveTimer);
     if (!session || !session.entries.length || !alive) return;
     const { meta, entries } = session;
-    meta.title = meetingTitle();
+    meta.eventTitle = eventTitle() || meta.eventTitle || "";
+    meta.self = me() || meta.self || "";
     meta.participants = [...participants];
     meta.endedAt = Math.max(meta.endedAt || 0, entries[entries.length - 1].ts);
     try {
@@ -274,7 +294,7 @@
       captionsOn: !!region,
       paused: settings.paused,
       count: session ? session.entries.length : 0,
-      title: code ? meetingTitle() : "",
+      title: session ? MT.title(session.meta) : code ? eventTitle() || "Call" : "",
       meetingId: session ? session.meta.id : null,
     };
   }
@@ -299,6 +319,7 @@
       const el = document.querySelector(REGION_SEL);
       if (el !== region) attach(el);
       if (!region) tryEnableCaptions();
+      detectSelfName();
       collectParticipants();
       // The caption button only exists inside a call; once it is gone the user has left.
       const inCall = !!region || captionButtons().length > 0;
@@ -315,6 +336,7 @@
 
   async function init() {
     settings = await MT.getSettings();
+    selfName = (await chrome.storage.local.get("selfName")).selfName || "";
     chrome.storage.onChanged.addListener((changes) => {
       if (!changes.settings) return;
       settings = { ...settings, ...changes.settings.newValue };

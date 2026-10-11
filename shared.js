@@ -1,6 +1,7 @@
 // Storage layout and helpers shared by the content script, popup and viewer.
 //
-//   meetings         -> { [id]: { id, code, title, startedAt, endedAt, entryCount, speakers } }
+//   meetings         -> { [id]: { id, code, title, eventTitle, renamed, self, startedAt, endedAt,
+//                                  entryCount, speakers, participants } }
 //   t:<id>           -> [ { speaker, text, ts } ]   (ts = epoch ms when the line started)
 //   f:<id>           -> { downloadId, filename, savedAt, hash, error }   (the saved .docx)
 //   settings         -> { autoCaptions, hideCaptions, myName, paused, autoSave }
@@ -37,16 +38,17 @@ const MT = (() => {
   async function saveMeeting(meta, entries) {
     const { meetings = {} } = await get("meetings");
     const existing = meetings[meta.id] || {};
-    // Keep a title the user renamed in the viewer.
-    const title = existing.renamed ? existing.title : meta.title;
-    meetings[meta.id] = {
+    const merged = {
       ...existing,
       ...meta,
-      title,
+      renamed: existing.renamed || meta.renamed,
+      title: existing.renamed ? existing.title : meta.title, // keep a title the user renamed in the viewer
       entryCount: entries.length,
       speakers: [...new Set(entries.map((e) => e.speaker))],
       participants: [...new Set([...(existing.participants || []), ...(meta.participants || [])])],
     };
+    merged.title = title(merged);
+    meetings[meta.id] = merged;
     await set({ meetings, ["t:" + meta.id]: entries });
   }
 
@@ -137,21 +139,48 @@ const MT = (() => {
     return [...seen.values()];
   }
 
+  // Everyone except you.
+  const others = (meta) => people(meta).filter((n) => !meta.self || n.toLowerCase() !== meta.self.toLowerCase());
+
+  const nameList = (names) => names.slice(0, 4).join(", ") + (names.length > 4 ? ` +${names.length - 4}` : "");
+
+  // Recordings made before eventTitle existed stored "Meet abc-defg-hij" for untitled calls.
+  const LEGACY_UNTITLED = /^Meet [a-z]{3,4}-[a-z]{4}-[a-z]{3,4}$/;
+
+  // A calendar event (or a meeting the user named) rather than a spontaneous call.
+  function isScheduled(meta) {
+    if (meta.renamed || meta.eventTitle) return true;
+    return meta.eventTitle === undefined && !!meta.title && !LEGACY_UNTITLED.test(meta.title);
+  }
+
+  // Scheduled: the event title. Spontaneous: named after who else joined.
+  function title(meta) {
+    if (meta.renamed) return meta.title;
+    if (meta.eventTitle) return meta.eventTitle;
+    if (isScheduled(meta)) return meta.title;
+    const o = others(meta);
+    return o.length ? "Call with " + nameList(o) : "Solo call";
+  }
+
   function isoDate(ts) {
     const d = new Date(ts);
     return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
   }
 
-  // "2026-10-11 - Weekly sync - Alice, Bob, Sam +2"
+  // Scheduled:   "2026-10-11 - Weekly sync - Alice, Bob, Sam +2"
+  // Spontaneous: "2026-10-11 - Call with Alice, Bob"   (the names are already in the title)
   function docName(meta) {
-    const names = people(meta);
-    const shown = names.slice(0, 4).join(", ") + (names.length > 4 ? ` +${names.length - 4}` : "");
+    const parts = [isoDate(meta.startedAt), title(meta)];
+    if (isScheduled(meta) && people(meta).length) parts.push(nameList(people(meta)));
     // Safe as a file name on macOS and Windows: no path or reserved characters, no control
     // characters, no leading/trailing dots or spaces, and short enough for Windows paths.
-    return [isoDate(meta.startedAt), meta.title, shown].filter(Boolean).join(" - ")
+    return parts.join(" - ")
       .replace(/[\\/:*?"<>|\u0000-\u001f\u007f]+/g, " ").replace(/\s+/g, " ")
       .slice(0, 150).replace(/^[.\s]+|[.\s]+$/g, "") || "Meet transcript";
   }
+
+  // Files are grouped in one folder per day: "Meet Transcripts/2026-10-11/".
+  const dayFolder = (meta) => isoDate(meta.startedAt);
 
   // The saved document, as blocks for docx.js: details, speaking time, highlights, transcript.
   function docBlocks(meta, entries) {
@@ -159,7 +188,7 @@ const MT = (() => {
     const when = (ts) => ({ text: `[${clock(ts - meta.startedAt)}]`, color: GREY });
     const label = (name, value) => [{ text: name + ": ", bold: true }, { text: value }];
     const blocks = [
-      { style: "Title", runs: [{ text: meta.title }] },
+      { style: "Title", runs: [{ text: title(meta) }] },
       { runs: [
         ...label("Date", `${dateTime(meta.startedAt)} (${duration(meta)})`),
         { br: true }, ...label("Participants", people(meta).join(", ") || "—"),
@@ -202,14 +231,14 @@ const MT = (() => {
   }
 
   function toText(meta, entries) {
-    const head = `${meta.title}\n${dateTime(meta.startedAt)} · ${duration(meta)}\n\n`;
+    const head = `${title(meta)}\n${dateTime(meta.startedAt)} · ${duration(meta)}\n\n`;
     return head + groupTurns(entries)
       .map((t) => `[${clock(t.ts - meta.startedAt)}] ${t.speaker}: ${t.lines.map((l) => l.text).join(" ")}`)
       .join("\n\n") + "\n";
   }
 
   function toMarkdown(meta, entries) {
-    const head = `# ${meta.title}\n\n*${dateTime(meta.startedAt)} · ${duration(meta)} · ` +
+    const head = `# ${title(meta)}\n\n*${dateTime(meta.startedAt)} · ${duration(meta)} · ` +
       `${people(meta).join(", ")}*\n\n`;
     return head + groupTurns(entries)
       .map((t) => `**${t.speaker}** \`${clock(t.ts - meta.startedAt)}\`  \n${t.lines.map((l) => l.text).join(" ")}`)
@@ -219,6 +248,6 @@ const MT = (() => {
   return {
     getSettings, saveSettings, listMeetings, getTranscript, saveMeeting, updateMeeting, deleteMeeting,
     getFile, setFile, groupTurns, clock, dateTime, duration, toText, toMarkdown,
-    FILTERS, highlights, people, docName, docBlocks,
+    FILTERS, highlights, people, others, title, isScheduled, docName, dayFolder, docBlocks,
   };
 })();
