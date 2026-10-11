@@ -168,7 +168,7 @@ async function doSync(id, { interactive = false, force = false } = {}) {
     return result;
   } catch (err) {
     const signIn = err.message === "SIGN_IN_NEEDED";
-    const error = signIn ? "Not signed in to Google. Open the extension popup and click Connect Google Drive." : err.message;
+    const error = signIn ? "Not signed in to Google. Open the extension popup and click Sign in with Google." : err.message;
     await MT.setDrive(id, { ...prev, error });
     if (signIn) await MT.saveSettings({ driveConnected: false });
     throw new Error(error);
