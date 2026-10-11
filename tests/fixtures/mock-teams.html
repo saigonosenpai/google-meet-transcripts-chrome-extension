@@ -1,0 +1,69 @@
+<!doctype html>
+<html><head><title>Project kickoff | Microsoft Teams</title></head>
+<body>
+<!-- Mimics Teams on the web: a meeting with live captions behind More › Language and speech. -->
+<div id="bar">
+  <button id="callingButtons-showMoreBtn" aria-label="More">…</button>
+  <button id="hangup-button" aria-label="Leave">Leave</button>
+</div>
+<script>
+const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+function menu(items) {
+  document.querySelectorAll('[role="menu"]').forEach((m) => m.remove());
+  const m = document.createElement("div");
+  m.setAttribute("role", "menu");
+  for (const [label, fn] of items) {
+    const b = document.createElement("div");
+    b.setAttribute("role", "menuitem");
+    b.textContent = label;
+    b.onclick = fn;
+    m.append(b);
+  }
+  document.body.append(m);
+}
+document.addEventListener("keydown", (e) => { if (e.key === "Escape") document.querySelectorAll('[role="menu"]').forEach((m) => m.remove()); });
+let list = null;
+document.getElementById("callingButtons-showMoreBtn").onclick = () => menu([
+  ["Meeting info", () => {}],
+  ["Language and speech", () => menu([["Turn on live captions", () => {
+    document.querySelectorAll('[role="menu"]').forEach((m) => m.remove());
+    const wrap = document.createElement("div");
+    wrap.setAttribute("data-tid", "closed-caption-v2-window-wrapper");
+    list = document.createElement("div");
+    list.setAttribute("data-tid", "closed-captions-renderer");
+    wrap.append(list);
+    document.body.append(wrap);
+    run();
+  }]])],
+]);
+function item(name) {
+  const it = document.createElement("div");
+  it.className = "fui-ChatMessageCompact";
+  it.innerHTML = '<div class="hdr"><span data-tid="author"></span></div><div><span data-tid="closed-caption-text"></span></div>';
+  it.querySelector('[data-tid="author"]').textContent = name;
+  list.append(it);
+  return it.querySelector('[data-tid="closed-caption-text"]');
+}
+async function say(name, steps) {
+  const t = item(name);
+  for (const s of steps) { t.textContent = s; await wait(120); }
+}
+async function run() {
+  await say("Dana Wu", ["Welcome", "Welcome everyone", "Welcome everyone to the project kickoff for the new portal."]);
+  await say("Eli Park", ["Thanks", "Thanks Dana. I will own the API work and send a plan by Friday."]);
+  await say("Sam Lee", ["Sounds good, I will take the design side of it."]);
+  await wait(1500);
+  // Teams re-draws its caption list now and then: the same lines, new elements.
+  const lines = [...list.children].map((it) => [it.querySelector('[data-tid="author"]').textContent, it.querySelector('[data-tid="closed-caption-text"]').textContent]);
+  list.innerHTML = "";
+  for (const [name, text] of lines) item(name).textContent = text;
+  window.firstPart = true;
+  await new Promise((r) => (window.continueCall = r));
+  await say("Dana Wu", ["Okay, welcome back. Let's wrap up with next steps."]);
+  window.done = true;
+}
+window.leave = () => {
+  document.body.innerHTML = "<h1>You left the meeting</h1><button>Rejoin</button>";
+};
+</script>
+</body></html>

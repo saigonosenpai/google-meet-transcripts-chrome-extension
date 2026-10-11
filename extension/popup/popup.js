@@ -2,10 +2,13 @@ const $ = (id) => document.getElementById(id);
 let tab = null;
 let current = null;
 
+// Pages the recorder runs on, matching the manifest's content scripts.
+const CALL_PAGES = /^https:\/\/(meet\.google\.com|teams\.microsoft\.com|teams\.live\.com|teams\.cloud\.microsoft|([\w-]+\.)?zoom\.us\/wc)\//;
+
 async function refresh() {
   [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
   current = null;
-  if (tab && /^https:\/\/meet\.google\.com\//.test(tab.url || "")) {
+  if (tab && CALL_PAGES.test(tab.url || "")) {
     try { current = await chrome.tabs.sendMessage(tab.id, { type: "getStatus" }); } catch {}
   }
   render();
@@ -15,15 +18,22 @@ function render() {
   const dot = $("dot"), state = $("state"), detail = $("detail");
   dot.className = "dot";
   $("meetActions").hidden = !current || !current.inMeeting;
+  $("diagnose").hidden = !current || !current.inMeeting || current.paused || (current.captionsOn && current.count > 0);
   if (!current) {
-    state.textContent = "Not on a Google Meet call";
-    detail.textContent = tab && /meet\.google\.com/.test(tab.url || "")
-      ? "Reload the Meet tab so the recorder can start."
-      : "Join a meeting and captions will be recorded automatically.";
+    state.textContent = "Not in a call";
+    detail.textContent = tab && CALL_PAGES.test(tab.url || "")
+      ? "Reload this tab so the recorder can start."
+      : "Join a Google Meet, Teams or Zoom call in Chrome and its captions are recorded automatically.";
+    return;
+  }
+  const where = MT.PLATFORMS[current.platform].name;
+  if (current.disabled) {
+    state.textContent = "Not recording " + where;
+    detail.textContent = "Turned off below, under Record calls in.";
     return;
   }
   if (!current.inMeeting) {
-    state.textContent = "Waiting for a meeting";
+    state.textContent = "Waiting for a call";
     detail.textContent = "";
     return;
   }
@@ -34,14 +44,14 @@ function render() {
     state.textContent = "Paused";
   } else if (current.captionsOn) {
     dot.classList.add("rec");
-    state.textContent = "Recording";
+    state.textContent = "Recording · " + MT.PLATFORMS[current.platform].short;
   } else {
     dot.classList.add("warn");
     state.textContent = "Captions are off";
   }
   detail.textContent = current.captionsOn || current.count
     ? `${current.title} · ${current.count} line${current.count === 1 ? "" : "s"} captured`
-    : "Turn on captions (CC button, or press c) — the transcript comes from Meet's live captions.";
+    : current.captionHint + " The transcript comes from the call's live captions.";
 }
 
 async function fileRecords() {
@@ -65,8 +75,23 @@ async function init() {
   const s = await MT.getSettings();
   $("autoCaptions").checked = s.autoCaptions;
   $("hideCaptions").checked = s.hideCaptions;
+  $("showIndicator").checked = s.showIndicator;
   $("myName").value = s.myName;
-  for (const id of ["autoCaptions", "hideCaptions"]) {
+  for (const box of document.querySelectorAll(".platform")) {
+    box.checked = s.platforms[box.dataset.platform] !== false;
+    box.addEventListener("change", async () => {
+      const { platforms } = await MT.getSettings();
+      await MT.saveSettings({ platforms: { ...platforms, [box.dataset.platform]: box.checked } });
+      setTimeout(refresh, 150);
+    });
+  }
+  $("diagnose").addEventListener("click", async () => {
+    let report;
+    try { report = await chrome.tabs.sendMessage(tab.id, { type: "diagnose" }); } catch {}
+    await navigator.clipboard.writeText(JSON.stringify(report || { error: "the page didn't answer" }, null, 2));
+    $("diagnose").textContent = "Copied. Paste it into a GitHub issue (it has no transcript text).";
+  });
+  for (const id of ["autoCaptions", "hideCaptions", "showIndicator"]) {
     $(id).addEventListener("change", (e) => MT.saveSettings({ [id]: e.target.checked }));
   }
   $("myName").addEventListener("input", (e) => MT.saveSettings({ myName: e.target.value.trim() }));

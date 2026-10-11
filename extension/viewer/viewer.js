@@ -84,7 +84,8 @@ function renderList() {
     li.tabIndex = 0;
     li.innerHTML = `<div class="t"></div><div class="s"></div>`;
     li.querySelector(".t").textContent = MT.title(m);
-    li.querySelector(".s").textContent = `${time} · ${MT.duration(m)} · ${(m.speakers || []).length} speaker${(m.speakers || []).length === 1 ? "" : "s"}`;
+    li.querySelector(".s").textContent = `${time} · ${MT.PLATFORMS[MT.platformOf(m)].short} · ${MT.duration(m)} · ` +
+      `${(m.speakers || []).length} speaker${(m.speakers || []).length === 1 ? "" : "s"}`;
     li.addEventListener("click", () => { location.hash = encodeURIComponent(m.id); });
     li.addEventListener("keydown", (e) => { if (e.key === "Enter") location.hash = encodeURIComponent(m.id); });
     list.append(li);
@@ -101,7 +102,7 @@ async function openMeeting(id) {
   renderList();
   if (!current) return;
   entries = await MT.getTranscript(id);
-  document.title = MT.title(current) + " · Meet Transcripts";
+  document.title = MT.title(current) + " · " + MT.APP;
   // Turns rise in when a meeting opens, not on every live update.
   const list = $("transcript");
   list.classList.add("entering");
@@ -120,7 +121,7 @@ function speakerColors() {
 function renderMeeting() {
   const colors = speakerColors();
   $("title").textContent = MT.title(current);
-  $("meta").textContent = `${MT.dateTime(current.startedAt)} · ${MT.duration(current)}`;
+  $("meta").textContent = `${MT.platformName(current)} · ${MT.dateTime(current.startedAt)} · ${MT.duration(current)}`;
 
   // Talk share by word count.
   const wordsBy = {};
@@ -132,8 +133,9 @@ function renderMeeting() {
   }
   $("speakers").innerHTML = Object.entries(wordsBy).sort((a, b) => b[1] - a[1]).map(([s, n]) => {
     const pct = Math.round((n / total) * 100);
-    return `<span class="spk" title="${esc(s)} spoke ${pct}% of the words">${avatar(s, colors[s] || COLORS[0])}` +
-      `${esc(s)}<span class="pct">${pct}%</span></span>`;
+    return `<button class="spk" data-name="${esc(s)}" aria-haspopup="dialog" aria-expanded="false" ` +
+      `title="${esc(s)} spoke ${pct}% of the words. Click to rename.">${avatar(s, colors[s] || COLORS[0])}` +
+      `${esc(s)}<span class="pct">${pct}%</span></button>`;
   }).join("");
 
   renderTranscript();
@@ -175,7 +177,7 @@ async function renderFile() {
     btn.disabled = true;
     btn.textContent = "Saving…";
     const r = await chrome.runtime.sendMessage({ type: "saveNow", id: current.id });
-    toast(r.ok ? "Saved to Downloads/Meet Transcripts" : "Couldn't save: " + r.error);
+    toast(r.ok ? "Saved to Downloads/Meeting Transcripts" : "Couldn't save: " + r.error);
     renderFile();
   });
 }
@@ -185,21 +187,23 @@ function renderTranscript() {
   const q = query.toLowerCase();
   let turns;
   if (filter === "all") {
-    turns = MT.groupTurns(entries);
+    turns = q ? MT.groupTurns(entries) : MT.timeline(current, entries); // gaps only in the full transcript
   } else {
     // Sentence-level filters: each matching sentence stands on its own.
     turns = MT.highlights(entries, filter).map((h) => ({ speaker: h.speaker, ts: h.ts, lines: [{ text: h.text }] }));
   }
   if (q) turns = turns.filter((t) => t.lines.some((l) => l.text.toLowerCase().includes(q)) || t.speaker.toLowerCase().includes(q));
+  const count = turns.filter((t) => t.kind !== "gap").length;
 
   const note = $("filterNote");
   note.hidden = filter === "all" && !q;
   note.textContent = filter === "all"
-    ? `${turns.length} matching turn${turns.length === 1 ? "" : "s"}`
-    : `${turns.length} ${MT.FILTERS[filter].label.toLowerCase()} · picked out by keywords, so skim them in context`;
+    ? `${count} matching turn${count === 1 ? "" : "s"}`
+    : `${count} ${MT.FILTERS[filter].label.toLowerCase()} · picked out by keywords, so skim them in context`;
 
   const recent = Date.now() - current.endedAt < 15_000;
   $("transcript").innerHTML = turns.map((t, i) => {
+    if (t.kind === "gap") return `<div class="gap" role="separator">${esc(MT.gapText(current, t))}</div>`;
     const isLive = recent && i === turns.length - 1 && filter === "all" && !q;
     return `<div class="turn">${avatar(t.speaker, colors[t.speaker] || COLORS[0])}<div>` +
       `<div class="head"><span class="who">${esc(t.speaker)}</span>` +
@@ -226,7 +230,7 @@ async function copy(text, msg) {
   toast(msg);
 }
 
-const AI_PROMPT = `Below is a transcript of a Google Meet call, generated from live captions (expect some recognition errors). Please give me:
+const aiPrompt = (meta) => `Below is a transcript of a ${MT.platformName(meta)} call, generated from live captions (expect some recognition errors). Please give me:
 1. A 3–5 sentence summary
 2. Key points and decisions
 3. Action items, with owners and deadlines where mentioned
@@ -278,10 +282,50 @@ function bindActions() {
     current.renamed = true;
     current.title = title;
     await MT.updateMeeting(current.id, { title, renamed: true });
+    chrome.runtime.sendMessage({ type: "resave", id: current.id });
     toast("Renamed");
   });
 
-  $("copyAI").addEventListener("click", () => copy(AI_PROMPT + MT.toText(current, entries), "Copied — paste into your AI chat"));
+  $("copyAI").addEventListener("click", () => copy(aiPrompt(current) + MT.toText(current, entries), "Copied — paste into your AI chat"));
+
+  // Rename a speaker: click their chip.
+  let renaming = null;
+  const closeRename = () => {
+    $("renameBox").classList.remove("open");
+    if (renaming) renaming.setAttribute("aria-expanded", "false");
+    renaming = null;
+  };
+  $("speakers").addEventListener("click", (e) => {
+    const chip = e.target.closest("button.spk");
+    if (!chip) return;
+    e.stopPropagation();
+    if (renaming === chip) return closeRename();
+    closeRename();
+    renaming = chip;
+    chip.setAttribute("aria-expanded", "true");
+    const box = $("renameBox");
+    box.style.left = chip.offsetLeft + "px";
+    box.style.top = chip.offsetTop + chip.offsetHeight + 6 + "px";
+    $("renameFrom").textContent = chip.dataset.name;
+    $("renameInput").value = chip.dataset.name;
+    $("renameFuture").checked = false;
+    box.classList.add("open");
+    $("renameInput").focus();
+    $("renameInput").select();
+  });
+  $("renameBox").addEventListener("click", (e) => e.stopPropagation());
+  $("renameCancel").addEventListener("click", closeRename);
+  $("renameBox").addEventListener("keydown", (e) => { if (e.key === "Escape") { e.stopPropagation(); closeRename(); } });
+  $("renameBox").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const from = renaming && renaming.dataset.name, to = $("renameInput").value.trim(), future = $("renameFuture").checked;
+    closeRename();
+    if (!from || !to || to === from) return;
+    await MT.renameSpeaker(current.id, from, to, future);
+    chrome.runtime.sendMessage({ type: "resave", id: current.id });
+    toast(future ? `Renamed to “${to}”, here and in future calls` : `Renamed to “${to}”`);
+  });
+  document.addEventListener("click", closeRename);
 
   $("exportBtn").addEventListener("click", (e) => {
     e.stopPropagation();
@@ -315,7 +359,7 @@ function bindActions() {
     });
   });
 
-  // Rebuild meetings from saved .docx files (pick the "Meet Transcripts" folder, or files).
+  // Rebuild meetings from saved .docx files (pick the "Meeting Transcripts" folder, or files).
   $("importBtn").addEventListener("click", () => { $("importBtn").classList.remove("pulse"); $("importInput").click(); });
   $("importInput").addEventListener("change", async (e) => {
     const picked = [...e.target.files];

@@ -7,7 +7,7 @@
 <body>
   <header>
     <img src="../icons/icon32.png" alt="">
-    <h1>Meet Transcripts</h1>
+    <h1>Meeting Transcripts</h1>
   </header>
 
   <section id="status" class="hero">
@@ -17,6 +17,7 @@
       <button id="pause" class="btn"></button>
       <button id="viewCurrent" class="btn tinted">View live transcript</button>
     </div>
+    <button id="diagnose" class="link small" hidden>Captions not being picked up? Copy a report</button>
   </section>
 
   <h2>Recording</h2>
@@ -30,11 +31,32 @@
       <input type="checkbox" class="switch" id="hideCaptions">
     </label>
     <label class="row">
+      <span>Show indicator in calls</span>
+      <input type="checkbox" class="switch" id="showIndicator">
+    </label>
+    <label class="row">
       <span>Your name</span>
       <input type="text" id="myName" placeholder="From your account">
     </label>
   </section>
-  <p class="footnote">Captions only show for you; nobody else in the call is notified.</p>
+  <p class="footnote">Captions only show for you; nobody else in the call is notified. The indicator is only shown to you.</p>
+
+  <h2>Record calls in</h2>
+  <section class="group">
+    <label class="row">
+      <span>Google Meet</span>
+      <input type="checkbox" class="switch platform" data-platform="meet">
+    </label>
+    <label class="row">
+      <span>Microsoft Teams</span>
+      <input type="checkbox" class="switch platform" data-platform="teams">
+    </label>
+    <label class="row">
+      <span>Zoom</span>
+      <input type="checkbox" class="switch platform" data-platform="zoom">
+    </label>
+  </section>
+  <p class="footnote">In Chrome only: Teams and Zoom calls joined in the browser, not their desktop apps.</p>
 
   <h2>Word documents</h2>
   <section class="group">
@@ -51,7 +73,7 @@
     Chrome asks where to save each file, so transcripts can't save on their own.
     <button id="dlSettings" class="link">Change this setting</button>
   </div>
-  <p class="footnote">In Downloads › Meet Transcripts, a folder per day. <span id="lastSaved"></span></p>
+  <p class="footnote">In Downloads › Meeting Transcripts, a folder per day. <span id="lastSaved"></span></p>
 
   <button id="openViewer" class="btn filled">All Transcripts</button>
 

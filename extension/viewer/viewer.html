@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Meet Transcripts</title>
+  <title>Meeting Transcripts</title>
   <link rel="icon" href="../icons/icon32.png">
   <link rel="stylesheet" href="viewer.css">
 </head>
@@ -17,13 +17,14 @@
     <ul id="list"></ul>
     <div id="emptyLib" class="empty-state" hidden>
       <strong>No transcripts yet</strong>
-      Join a Google Meet call with captions on, and it shows up here as you talk.
+      Join a Google Meet, Microsoft Teams or Zoom call in Chrome with captions on, and it shows up here as you talk.
       Used it before? <b>Restore from folder</b> below and pick
-      <span class="path">Downloads › Meet Transcripts</span> to bring back your history and settings.
+      <span class="path">Downloads › Meeting Transcripts</span> (or <span class="path">Meet Transcripts</span>
+      from older versions) to bring back your history and settings.
       <span id="welcomeChoice" hidden><br><button id="startFresh" class="btn link">Start a new library instead</button></span>
     </div>
     <div class="sidebar-foot">
-      <button id="importBtn" class="btn" title="Rebuild transcripts and settings from your Meet Transcripts folder">
+      <button id="importBtn" class="btn" title="Rebuild transcripts and settings from your Meeting Transcripts folder">
         <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 2v8m0 0-3-3m3 3 3-3M3 11v1.5a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1V11"/></svg>
         Restore from folder…
       </button>
@@ -40,7 +41,13 @@
       <header>
         <p id="meta" class="eyebrow"></p>
         <h1 id="title" contenteditable="plaintext-only" spellcheck="false" title="Click to rename"></h1>
-        <div id="speakers" class="speakers"></div>
+        <div id="speakers" class="speakers" title="Click a name to rename that speaker"></div>
+        <form id="renameBox" class="popover rename" autocomplete="off">
+          <label class="field" for="renameInput">Rename <b id="renameFrom"></b> to</label>
+          <input id="renameInput" type="text" spellcheck="false">
+          <label class="check"><input id="renameFuture" type="checkbox"> Also in future calls</label>
+          <div class="actions"><button type="button" id="renameCancel" class="btn">Cancel</button><button type="submit" class="btn primary">Rename</button></div>
+        </form>
         <div id="file" class="file"></div>
       </header>
 

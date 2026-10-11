@@ -3,6 +3,35 @@
 Each version here becomes a release on GitHub, with the extension zip attached, as soon as
 it's pushed to `main` with the matching `version` in `extension/manifest.json`.
 
+## 2.0.0
+
+### Now records Microsoft Teams and Zoom too, and is called Meeting Transcripts
+
+- **Teams and Zoom in the browser.** Calls in Teams on the web (teams.microsoft.com,
+  teams.live.com, teams.cloud.microsoft) and in Zoom's web client ("Join from your browser")
+  are recorded like Google Meet calls: captions turned on for you, saved as a Word document
+  per call, in the same library. Each meeting is labelled Meet, Teams or Zoom, and the
+  document says which. Turn any platform off in the popup under *Record calls in*. The
+  desktop apps can't be recorded by a browser extension.
+- **Rename a speaker.** Click a name in the library to fix it (a phone number,
+  "Presentation", a misspelling), in that meeting or, with *Also in future calls*, from
+  then on. The Word document is updated too, as it now is when you rename a meeting.
+- **Gaps are marked.** When captions were off, recording was paused or you'd left and
+  rejoined, the transcript says so: "Captions were off 12:40–19:52 (7 min); nothing was
+  recorded".
+- **An indicator in the call.** A small *Recording captions* pill in the corner of the call;
+  click it to pause, resume or turn captions on. Only you see it, and it can be turned off
+  in the popup.
+- **Copy a report** from the popup when a call's captions aren't being picked up: it
+  describes the page's layout (never the captions) so a Teams or Zoom page change can be
+  fixed quickly.
+- Captions are picked up sooner after they appear, and a caption list the page re-draws is
+  no longer recorded twice.
+
+**Your files move.** The folder is now `Downloads/Meeting Transcripts`. On the first start,
+saved documents and `library.json` move there from `Downloads/Meet Transcripts` by
+themselves; delete the old folder afterwards. **Restore from folder…** accepts either.
+
 ## 1.4.0
 
 ### Your history now survives reinstalls

@@ -1,5 +1,6 @@
 // End-to-end test: loads the extension in Chromium, serves a fake Meet call, and checks
-// the stored transcript and the .docx file it saves to Downloads/Meet Transcripts.
+// the stored transcript and the .docx file it saves to Downloads/Meeting Transcripts. Teams and
+// Zoom run the same way against their own mock pages.
 //   node tests/e2e.mjs [extension dir] [screenshot dir]
 import path from "node:path";
 import fs from "node:fs";
@@ -12,7 +13,8 @@ import { chromium } from "playwright";
 
 const ext = path.resolve(process.argv[2] || new URL("../extension", import.meta.url).pathname);
 const shots = process.argv[3] || ".";
-const mock = fs.readFileSync(new URL("./fixtures/mock-meet.html", import.meta.url), "utf8");
+const fixture = (name) => fs.readFileSync(new URL("./fixtures/" + name, import.meta.url), "utf8");
+const mock = fixture("mock-meet.html");
 // Launch Chromium ourselves and attach over CDP: Playwright's own launch intercepts
 // downloads and renames them, and we want to see the files exactly as Chrome saves them.
 async function launch({ askWhereToSave = false } = {}) {
@@ -49,7 +51,7 @@ const sw = await ctx.newPage();
 await sw.goto(`chrome-extension://${id}/viewer/viewer.html`);
 const today = new Date(); const pad = (n) => String(n).padStart(2, "0");
 const date = `${today.getFullYear()}-${pad(today.getMonth() + 1)}-${pad(today.getDate())}`;
-const dayDir = path.join(downloads, "Meet Transcripts", date);
+const dayDir = path.join(downloads, "Meeting Transcripts", date);
 const fileOf = (mid) => sw.evaluate((k) => chrome.storage.local.get(k).then((d) => d[k]), "f:" + mid);
 
 // --- a scheduled call ("Weekly sync") ---------------------------------------------------------
@@ -160,11 +162,13 @@ await v.screenshot({ path: shots + "/viewer-list.png" });
 // --- reinstall: settings.json + .docx files bring everything back -------------------------------
 await v.evaluate(() => MT.saveSettings({ myName: "Sam Lee", hideCaptions: true, autoCaptions: false }));
 // A fresh install that hasn't restored yet keeps its calls in an interim file, never library.json.
-const libraryPath = path.join(downloads, "Meet Transcripts", "library (since reinstall).json");
+const libraryPath = path.join(downloads, "Meeting Transcripts", "library (since reinstall).json");
 const readLibrary = () => { try { return JSON.parse(fs.readFileSync(libraryPath, "utf8")); } catch { return null; } };
 for (let i = 0; i < 60 && readLibrary()?.settings?.myName !== "Sam Lee"; i++) await v.waitForTimeout(250);
 const savedLib = readLibrary();
-assert.deepEqual(savedLib.settings, { autoCaptions: false, hideCaptions: true, myName: "Sam Lee", autoSave: true });
+assert.deepEqual({ ...savedLib.settings, showIndicator: undefined, platforms: undefined, nameMap: undefined },
+  { autoCaptions: false, hideCaptions: true, myName: "Sam Lee", autoSave: true, showIndicator: undefined, platforms: undefined, nameMap: undefined });
+assert.deepEqual(savedLib.settings.platforms, { meet: true, teams: true, zoom: true });
 assert.equal(Object.keys(savedLib.meetings).length, 3);
 console.log("library.json written:", Object.keys(savedLib.meetings).length, "meetings,", JSON.stringify(savedLib.settings));
 
@@ -177,8 +181,8 @@ await v.goto(`chrome-extension://${id}/viewer/viewer.html#welcome`);
 await v.waitForSelector("#emptyLib:not([hidden])");
 assert.ok(await v.$("#importBtn.pulse"), "restore button highlighted on a fresh library");
 // What picking the folder hands the page: every file in it, day folders included.
-const folderFiles = fs.readdirSync(path.join(downloads, "Meet Transcripts"), { recursive: true })
-  .map((f) => path.join(downloads, "Meet Transcripts", f)).filter((f) => fs.statSync(f).isFile());
+const folderFiles = fs.readdirSync(path.join(downloads, "Meeting Transcripts"), { recursive: true })
+  .map((f) => path.join(downloads, "Meeting Transcripts", f)).filter((f) => fs.statSync(f).isFile());
 await v.evaluate(() => document.getElementById("importInput").removeAttribute("webkitdirectory"));
 await v.setInputFiles("#importInput", folderFiles);
 await v.waitForSelector("#toast.show");
@@ -189,20 +193,154 @@ const linesAfter = await v.evaluate(async () => Object.fromEntries(await Promise
   (await MT.listMeetings()).map(async (m) => [MT.title(m), (await MT.getTranscript(m.id)).length]))));
 assert.deepEqual(linesAfter, linesBefore, "every line restored, exactly as recorded");
 // library.json comes first; the .docx files of the same calls are recognized, not added twice.
-assert.match(await v.textContent("#toastText"), /Restored 3 meetings · settings · 3 already here/);
+assert.equal(await v.textContent("#toastText"), "Restored 3 meetings · settings · 3 already here");
 // After a restore, library.json holds everything and the interim file is gone.
-const mainLib = path.join(downloads, "Meet Transcripts", "library.json");
+const mainLib = path.join(downloads, "Meeting Transcripts", "library.json");
 for (let i = 0; i < 60 && !(fs.existsSync(mainLib) && !fs.existsSync(libraryPath)); i++) await v.waitForTimeout(250);
 assert.equal(Object.keys(JSON.parse(fs.readFileSync(mainLib, "utf8")).meetings).length, 3, "library.json has all 3");
 assert.ok(!fs.existsSync(libraryPath), "interim file removed");
-console.log("folder now:", fs.readdirSync(path.join(downloads, "Meet Transcripts")).join(" | "));
+console.log("folder now:", fs.readdirSync(path.join(downloads, "Meeting Transcripts")).join(" | "));
 const restored = await v.evaluate(() => MT.getSettings());
 assert.equal(restored.myName, "Sam Lee");
 assert.equal(restored.hideCaptions, true);
 assert.equal(restored.autoCaptions, false);
 console.log("restored meetings:", titlesAfter.join(" | "));
 
+// --- Microsoft Teams ------------------------------------------------------------------------------
+await v.evaluate(() => MT.saveSettings({ autoCaptions: true, hideCaptions: false }));
+await ctx.route("https://teams.microsoft.com/**", (r) => r.fulfill({ contentType: "text/html", body: fixture("mock-teams.html") }));
+const meetingsOf = async (platform) => Object.values((await sw.evaluate(() => chrome.storage.local.get("meetings"))).meetings)
+  .filter((m) => m.platform === platform);
+const tp = await ctx.newPage();
+await tp.goto("https://teams.microsoft.com/v2/");
+// Captions are off: the recorder opens More › Language and speech › Turn on live captions itself.
+await tp.waitForFunction(() => window.firstPart, null, { timeout: 30000 });
+assert.ok(await tp.$("#meeting-transcripts-indicator"), "in-call indicator shown");
+await tp.waitForTimeout(2000);
+let [tm] = await meetingsOf("teams");
+let tLines = await sw.evaluate((k) => chrome.storage.local.get(k).then((d) => d[k]), "t:" + tm.id);
+console.log("teams lines:", tLines.map((e) => `${e.speaker}: ${e.text}`).join(" | "));
+assert.deepEqual(tLines.map((e) => e.speaker), ["Dana Wu", "Eli Park", "Sam Lee"], "a re-drawn caption list isn't recorded twice");
+assert.equal(tLines[1].text, "Thanks Dana. I will own the API work and send a plan by Friday.");
+// The popup's "Copy a report": the page's layout, never what anyone said.
+const report = await v.evaluate(async () => {
+  const [tab] = await chrome.tabs.query({ url: "https://teams.microsoft.com/*" });
+  return chrome.tabs.sendMessage(tab.id, { type: "diagnose" });
+});
+assert.equal(report.platform, "teams");
+assert.equal(report.captionsFound, true);
+assert.ok(report.captionArea.includes('[data-tid=closed-captions-renderer]'), report.captionArea);
+assert.ok(!/API work|kickoff for the new portal|Dana Wu/.test(JSON.stringify(report)), "no caption text or names in the report");
+console.log("diagnostics report:", report.blocks, "caption blocks found;", report.captionArea.split("\n")[0]);
+// Pause for a while: the transcript shows the stretch with nothing recorded.
+await v.evaluate(() => MT.saveSettings({ paused: true }));
+await tp.waitForTimeout(22000);
+await v.evaluate(() => MT.saveSettings({ paused: false }));
+await tp.evaluate(() => window.continueCall());
+await tp.waitForFunction(() => window.done, null, { timeout: 30000 });
+await tp.waitForTimeout(2000);
+await tp.evaluate(() => window.leave());
+let tFile;
+for (let i = 0; i < 40 && !(tFile = await fileOf(tm.id)); i++) await tp.waitForTimeout(250);
+[tm] = await meetingsOf("teams");
+console.log("teams:", tm.title, "->", path.basename(tFile.filename), "gaps:", JSON.stringify(tm.gaps.map((g) => [g.reason, Math.round((g.to - g.from) / 1000)])));
+assert.equal(tm.title, "Project kickoff");
+assert.equal(path.basename(tFile.filename), `${date} - Project kickoff - Sam Lee, Dana Wu, Eli Park.docx`);
+assert.equal(tm.gaps.length, 1);
+assert.equal(tm.gaps[0].reason, "paused");
+// The saved document says where the call happened and reads back as a Teams call.
+const tParsed = await v.evaluate(async (b64) => (await DOCX_IMPORT.parse(Uint8Array.from(atob(b64), (c) => c.charCodeAt(0)).buffer,
+  "2026-10-11 - x.docx")).meta, fs.readFileSync(tFile.filename).toString("base64"));
+assert.equal(tParsed.platform, "teams");
+await v.goto(`chrome-extension://${id}/viewer/viewer.html#` + encodeURIComponent(tm.id));
+await v.waitForSelector(".gap");
+console.log("gap shown:", await v.textContent(".gap"));
+assert.match(await v.textContent(".gap"), /^Recording was paused \d+:\d\d–\d+:\d\d \(1 min\); nothing was recorded$/);
+assert.match(await v.textContent("#meta"), /^Microsoft Teams · /);
+await v.screenshot({ path: shots + "/teams-viewer.png" });
+
+// --- Zoom (web client) ------------------------------------------------------------------------------
+await ctx.route("https://app.zoom.us/**", (r) => r.fulfill({ contentType: "text/html", body: fixture("mock-zoom.html") }));
+const zp = await ctx.newPage();
+await zp.goto("https://app.zoom.us/wc/9876543210/join");
+await zp.waitForFunction(() => window.done, null, { timeout: 30000 });
+await zp.waitForTimeout(2500);
+let [zm] = await meetingsOf("zoom");
+let zLines = await sw.evaluate((k) => chrome.storage.local.get(k).then((d) => d[k]), "t:" + zm.id);
+console.log("zoom lines:", zLines.map((e) => `${e.speaker}: ${e.text}`).join(" | "));
+assert.deepEqual(zLines.map((e) => e.speaker), ["Ann Lee", "Ben Cho", "Ann Lee"], "overlay lines keep their speaker; the transcript panel adds no duplicates");
+await zp.evaluate(() => window.leave());
+let zFile;
+for (let i = 0; i < 40 && !(zFile = await fileOf(zm.id)); i++) await zp.waitForTimeout(250);
+[zm] = await meetingsOf("zoom");
+console.log("zoom:", zm.title, "->", path.basename(zFile.filename), zm.link);
+assert.equal(zm.title, "Call with Ann Lee, Ben Cho");
+assert.equal(zm.link, "https://zoom.us/j/9876543210");
+
+// --- rename a speaker, here and in future calls; the file follows ------------------------------------
+await v.goto(`chrome-extension://${id}/viewer/viewer.html#` + encodeURIComponent(zm.id));
+await v.click('button.spk[data-name="Ben Cho"]');
+await v.waitForSelector("#renameBox.open");
+await v.fill("#renameInput", "Benjamin Cho");
+await v.check("#renameFuture");
+await v.screenshot({ path: shots + "/rename.png" });
+await v.click('#renameBox button[type="submit"]');
+await v.waitForSelector('button.spk[data-name="Benjamin Cho"]');
+for (let i = 0; i < 40 && !(await fileOf(zm.id)).filename.includes("Benjamin"); i++) await v.waitForTimeout(250);
+const zRenamed = await fileOf(zm.id);
+console.log("speaker renamed:", path.basename(zRenamed.filename));
+assert.equal(path.basename(zRenamed.filename), `${date} - Call with Ann Lee, Benjamin Cho.docx`);
+assert.ok(!fs.existsSync(zFile.filename), "old file replaced");
+assert.deepEqual((await v.evaluate(() => MT.getSettings())).nameMap, { "ben cho": "Benjamin Cho" });
+zLines = await sw.evaluate((k) => chrome.storage.local.get(k).then((d) => d[k]), "t:" + zm.id);
+assert.deepEqual(zLines.map((e) => e.speaker), ["Ann Lee", "Benjamin Cho", "Ann Lee"]);
+
+// --- turning a platform off: nothing is recorded there ------------------------------------------------
+await v.evaluate(() => MT.getSettings().then((s) => MT.saveSettings({ platforms: { ...s.platforms, zoom: false } })));
+const zp2 = await ctx.newPage();
+await zp2.goto("https://app.zoom.us/wc/1112223334/join");
+await zp2.waitForTimeout(5000);
+assert.ok(!(await zp2.$('[role="menu"], #live-transcription-subtitle')), "captions not even turned on");
+assert.equal((await meetingsOf("zoom")).length, 1, "no new Zoom meeting");
+await zp2.close();
+console.log("zoom turned off: nothing recorded");
+
 await close();
+
+// --- upgrading from "Meet Transcripts": files move to the new folder ---------------------------------
+{
+  const run = await launch();
+  const v = await run.ctx.newPage();
+  await v.goto(`chrome-extension://${id}/viewer/viewer.html`);
+  const old = await v.evaluate(async () => {
+    const done = (dl) => new Promise((r) => { const t = setInterval(async () => {
+      const [it] = await chrome.downloads.search({ id: dl });
+      if (it && it.state === "complete") { clearInterval(t); r(it); } }, 100); });
+    const docx = await done(await chrome.downloads.download({ url: "data:application/vnd.openxmlformats-officedocument.wordprocessingml.document;base64,UEsFBgAAAAAAAAAAAAAAAAAAAAAAAA==",
+      filename: "Meet Transcripts/2026-10-01/2026-10-01 - Old call - Ann.docx" }));
+    const lib = await done(await chrome.downloads.download({ url: "data:application/json,{}", filename: "Meet Transcripts/library.json" }));
+    const m = { id: "abc-defg-hij-1", code: "abc-defg-hij", eventTitle: "Old call", startedAt: new Date(2026, 9, 1, 9).getTime(),
+      endedAt: new Date(2026, 9, 1, 10).getTime(), speakers: ["Ann"] };
+    await chrome.storage.local.set({ meetings: { [m.id]: m }, ["t:" + m.id]: [{ speaker: "Ann", text: "Hi.", ts: m.startedAt }],
+      ["f:" + m.id]: { downloadId: docx.id, filename: docx.filename, savedAt: 1, hash: "x" },
+      fileLayout: 2, libraryReady: true, libraryDownloadId: lib.id });
+    return { docx: docx.filename, lib: lib.filename };
+  });
+  // Restart the background worker, as when Chrome loads a new version; it migrates on start.
+  const cdp = await run.browser.newBrowserCDPSession();
+  const { targetInfos } = await cdp.send("Target.getTargets");
+  for (const t of targetInfos.filter((t) => t.type === "service_worker" && t.url.includes(id))) await cdp.send("Target.closeTarget", { targetId: t.targetId });
+  await v.waitForTimeout(500);
+  await v.evaluate(() => chrome.runtime.sendMessage({ type: "ping" }).catch(() => {}));
+  const newDoc = path.join(run.downloads, "Meeting Transcripts", "2026-10-01", "2026-10-01 - Old call - Ann.docx");
+  const newLib = path.join(run.downloads, "Meeting Transcripts", "library.json");
+  for (let i = 0; i < 80 && !(fs.existsSync(newDoc) && fs.existsSync(newLib) && !fs.existsSync(old.lib)); i++) await new Promise((r) => setTimeout(r, 250));
+  assert.ok(fs.existsSync(newDoc), "document moved to Meeting Transcripts");
+  assert.ok(!fs.existsSync(old.docx), "old document removed");
+  assert.ok(fs.existsSync(newLib) && !fs.existsSync(old.lib), "library.json moved");
+  console.log("upgrade: moved to", path.relative(run.downloads, newDoc));
+  await run.close();
+}
 
 // --- Chrome set to "Ask where to save each file": a clear warning, not a silent failure ----
 {

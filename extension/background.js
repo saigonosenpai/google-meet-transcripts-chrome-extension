@@ -3,13 +3,13 @@ importScripts("lib/shared.js", "lib/docx.js");
 // --- toolbar badge ------------------------------------------------------------------------
 
 function setBadge(tabId, msg) {
-  let text = "", color = "#5f6368", title = "Meet Transcripts";
+  let text = "", color = "#5f6368", title = MT.APP;
   if (msg.inMeeting && msg.paused) {
-    text = "II"; title = "Meet Transcripts: paused";
+    text = "II"; title = MT.APP + ": paused";
   } else if (msg.inMeeting && msg.captionsOn) {
-    text = "REC"; color = "#d93025"; title = "Meet Transcripts: recording captions";
+    text = "REC"; color = "#d93025"; title = MT.APP + ": recording captions";
   } else if (msg.inMeeting) {
-    text = "CC"; title = "Meet Transcripts: turn on captions (CC) to record";
+    text = "CC"; title = MT.APP + ": turn on captions to record";
   }
   chrome.action.setBadgeText({ tabId, text });
   chrome.action.setBadgeBackgroundColor({ tabId, color });
@@ -18,12 +18,12 @@ function setBadge(tabId, msg) {
 
 // --- saving .docx files -------------------------------------------------------------------
 //
-// Files go to <Downloads>/Meet Transcripts/<YYYY-MM-DD>/ through chrome.downloads, which
+// Files go to <Downloads>/Meeting Transcripts/<YYYY-MM-DD>/ through chrome.downloads, which
 // needs no folder permission and works from this service worker. A later save of the same
 // meeting overwrites its file; if the name changed (renamed, more participants), the old
 // file is deleted so each meeting has exactly one document.
 
-const FOLDER = "Meet Transcripts";
+const FOLDER = "Meeting Transcripts"; // "Meet Transcripts" before Teams and Zoom support
 
 function hash(s) {
   let h = 0;
@@ -49,7 +49,7 @@ function waitForDownload(downloadId) {
 
 const norm = (p) => p.replace(/\\/g, "/");
 
-// "Meet Transcripts/2026-10-11/<name>.docx", adding " (2)", " (3)"… if another meeting
+// "Meeting Transcripts/2026-10-11/<name>.docx", adding " (2)", " (3)"… if another meeting
 // (say, a second call with the same people that day) already has that name.
 async function uniquePath(id, day, base) {
   const all = await chrome.storage.local.get(null);
@@ -126,7 +126,7 @@ const IDLE_MIN = 2;
 
 // Files saved by older versions used other names/folders. Re-save them once in the current
 // layout. Runs whenever the worker starts, so it doesn't depend on Chrome reporting the update.
-const LAYOUT = 2; // 2: one folder per day, spontaneous calls named "Call with …"
+const LAYOUT = 3; // 2: one folder per day, "Call with …"; 3: "Meeting Transcripts" instead of "Meet Transcripts"
 
 async function migrateFiles() {
   const all = await chrome.storage.local.get(null);
@@ -140,7 +140,7 @@ migrateFiles();
 
 // --- library.json: the history, kept in the folder ---------------------------------------
 //
-// Downloads/Meet Transcripts/library.json holds every meeting (title, participants, every
+// Downloads/Meeting Transcripts/library.json holds every meeting (title, participants, every
 // line with speaker and time) and your settings, rewritten a few seconds after anything
 // changes. Removing the extension clears Chrome's copy; "Restore from folder…" in the
 // transcripts page reads this file (and the .docx files) back.
@@ -151,7 +151,7 @@ migrateFiles();
 
 const LIBRARY_FILE = FOLDER + "/library.json";
 const INTERIM_FILE = FOLDER + "/library (since reinstall).json";
-const BACKED_UP = ["autoCaptions", "hideCaptions", "myName", "autoSave"]; // not "paused": that's momentary
+const BACKED_UP = ["autoCaptions", "hideCaptions", "myName", "autoSave", "showIndicator", "platforms", "nameMap"]; // not "paused": that's momentary
 let libraryTimer = null;
 
 async function writeLibraryFile() {
@@ -175,8 +175,13 @@ async function writeLibraryFile() {
     const id = await chrome.downloads.download({
       url: "data:application/json;base64," + btoa(bin), filename, conflictAction: "overwrite", saveAs: false,
     });
-    await waitForDownload(id);
-    if (all[idKey] && all[idKey] !== id) await chrome.downloads.erase({ id: all[idKey] }).catch(() => {});
+    const written = await waitForDownload(id);
+    if (all[idKey] && all[idKey] !== id) {
+      // The same file, overwritten; or one in the old "Meet Transcripts" folder, now moved.
+      const [old] = await chrome.downloads.search({ id: all[idKey] });
+      if (old && old.exists && norm(old.filename) !== norm(written.filename)) await chrome.downloads.removeFile(old.id).catch(() => {});
+      await chrome.downloads.erase({ id: all[idKey] }).catch(() => {});
+    }
     await chrome.storage.local.set({ [idKey]: id, librarySavedAt: Date.now() });
     // Once library.json holds everything, the interim file has served its purpose. Find it in
     // Chrome's download history: an earlier install may have written it.
@@ -201,7 +206,7 @@ chrome.storage.onChanged.addListener((changes, area) => {
   if (area !== "local" || !Object.keys(changes).some(isHistoryKey)) return;
   if (changes.settings && !changes.meetings && !Object.keys(changes).some((k) => k.startsWith("t:"))) {
     const before = changes.settings.oldValue || {}, after = changes.settings.newValue || {};
-    if (!BACKED_UP.some((k) => before[k] !== after[k])) return; // only "paused" moved
+    if (!BACKED_UP.some((k) => JSON.stringify(before[k]) !== JSON.stringify(after[k]))) return; // only "paused" moved
   }
   clearTimeout(libraryTimer);
   libraryTimer = setTimeout(writeLibraryFile, 3000); // once things settle, not on every caption
@@ -244,6 +249,9 @@ chrome.runtime.onMessage.addListener((msg, sender, reply) => {
     case "meetingEnded":
       chrome.alarms.clear("save:" + msg.id);
       saveDoc(msg.id).catch(() => {});
+      return false;
+    case "resave": // renamed in the viewer: bring an already saved file up to date
+      MT.getFile(msg.id).then((f) => f && f.downloadId && saveDoc(msg.id).catch(() => {}));
       return false;
     case "saveNow":
       saveDoc(msg.id, { manual: true })

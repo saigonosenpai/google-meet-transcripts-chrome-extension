@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
-  "name": "Meet Transcripts",
-  "version": "1.4.0",
-  "description": "Records Google Meet live captions and saves each call as a Word document.",
+  "name": "Meeting Transcripts",
+  "version": "2.0.0",
+  "description": "Records the live captions of Google Meet, Microsoft Teams and Zoom calls in Chrome and saves each call as a Word document.",
   "permissions": [
     "storage",
     "unlimitedStorage",
@@ -11,7 +11,12 @@
     "downloads.ui"
   ],
   "host_permissions": [
-    "https://meet.google.com/*"
+    "https://meet.google.com/*",
+    "https://teams.microsoft.com/*",
+    "https://teams.live.com/*",
+    "https://teams.cloud.microsoft/*",
+    "https://*.zoom.us/wc/*",
+    "https://zoom.us/wc/*"
   ],
   "background": {
     "service_worker": "background.js"
@@ -23,9 +28,39 @@
       ],
       "js": [
         "lib/shared.js",
-        "content.js"
+        "content/dom.js",
+        "content/platforms/meet.js",
+        "content/recorder.js"
       ],
       "run_at": "document_idle"
+    },
+    {
+      "matches": [
+        "https://teams.microsoft.com/*",
+        "https://teams.live.com/*",
+        "https://teams.cloud.microsoft/*"
+      ],
+      "js": [
+        "lib/shared.js",
+        "content/dom.js",
+        "content/platforms/teams.js",
+        "content/recorder.js"
+      ],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": [
+        "https://*.zoom.us/wc/*",
+        "https://zoom.us/wc/*"
+      ],
+      "js": [
+        "lib/shared.js",
+        "content/dom.js",
+        "content/platforms/zoom.js",
+        "content/recorder.js"
+      ],
+      "run_at": "document_idle",
+      "all_frames": true
     }
   ],
   "action": {
@@ -34,7 +69,8 @@
       "16": "icons/icon16.png",
       "32": "icons/icon32.png",
       "48": "icons/icon48.png"
-    }
+    },
+    "default_title": "Meeting Transcripts"
   },
   "icons": {
     "16": "icons/icon16.png",

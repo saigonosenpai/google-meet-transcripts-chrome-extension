@@ -1,15 +1,36 @@
 // Storage layout and helpers shared by the content script, popup and viewer.
 //
-//   meetings         -> { [id]: { id, code, title, eventTitle, renamed, self, startedAt, endedAt,
-//                                  entryCount, speakers, participants } }
+//   meetings         -> { [id]: { id, platform, code, link, title, eventTitle, renamed, self,
+//                                  startedAt, endedAt, entryCount, speakers, participants,
+//                                  gaps: [{ from, to, reason }], nameMap: { old: new }, left } }
 //   t:<id>           -> [ { speaker, text, ts } ]   (ts = epoch ms when the line started)
 //   f:<id>           -> { downloadId, filename, savedAt, hash, error }   (the saved .docx)
-//   settings         -> { autoCaptions, hideCaptions, myName, paused, autoSave }
+//   settings         -> { autoCaptions, hideCaptions, myName, paused, autoSave, showIndicator,
+//                         platforms: { meet, teams, zoom }, nameMap: { lowercased old: new } }
+//
+// Meetings recorded before Teams and Zoom support have no `platform`: they're Google Meet.
 
 const MT = (() => {
   const DEFAULT_SETTINGS = {
     autoCaptions: true, hideCaptions: false, myName: "", paused: false, autoSave: true,
+    showIndicator: true, platforms: { meet: true, teams: true, zoom: true }, nameMap: {},
   };
+
+  const APP = "Meeting Transcripts";
+  const PLATFORMS = {
+    meet: { name: "Google Meet", short: "Meet" },
+    teams: { name: "Microsoft Teams", short: "Teams" },
+    zoom: { name: "Zoom", short: "Zoom" },
+  };
+  const platformOf = (meta) => PLATFORMS[meta.platform] ? meta.platform : "meet";
+  const platformName = (meta) => PLATFORMS[platformOf(meta)].name;
+
+  // A name as renamed by the user: `map` is { old name: new name }, matched ignoring case.
+  function mapName(map, name) {
+    if (!map || !name) return name;
+    const hit = Object.entries(map).find(([from]) => from.toLowerCase() === name.toLowerCase());
+    return hit ? hit[1] : name;
+  }
 
   const get = (keys) => chrome.storage.local.get(keys);
   const set = (obj) => chrome.storage.local.set(obj);
@@ -38,9 +59,16 @@ const MT = (() => {
   async function saveMeeting(meta, entries) {
     const { meetings = {} } = await get("meetings");
     const existing = meetings[meta.id] || {};
+    // Speakers renamed in the viewer stay renamed while the call is still being recorded.
+    const nameMap = { ...(meta.nameMap || {}), ...(existing.nameMap || {}) };
+    if (Object.keys(nameMap).length) {
+      entries = entries.map((e) => ({ ...e, speaker: mapName(nameMap, e.speaker) }));
+      meta = { ...meta, self: mapName(nameMap, meta.self), participants: (meta.participants || []).map((n) => mapName(nameMap, n)) };
+    }
     const merged = {
       ...existing,
       ...meta,
+      nameMap,
       renamed: existing.renamed || meta.renamed,
       title: existing.renamed ? existing.title : meta.title, // keep a title the user renamed in the viewer
       entryCount: entries.length,
@@ -50,6 +78,30 @@ const MT = (() => {
     merged.title = title(merged);
     meetings[meta.id] = merged;
     await set({ meetings, ["t:" + meta.id]: entries });
+  }
+
+  // Renames a speaker throughout one meeting; with `future`, also in calls recorded from now on.
+  async function renameSpeaker(id, from, to, future) {
+    to = to.replace(/\s+/g, " ").trim();
+    if (!to || to === from) return;
+    const { meetings = {} } = await get("meetings");
+    const meta = meetings[id];
+    if (!meta) return;
+    const nameMap = { ...(meta.nameMap || {}) };
+    for (const k of Object.keys(nameMap)) if (nameMap[k] === from) nameMap[k] = to; // A→B then B→C means A→C
+    nameMap[from] = to;
+    const rename = (n) => (n === from ? to : n);
+    const entries = (await getTranscript(id)).map((e) => ({ ...e, speaker: rename(e.speaker) }));
+    meetings[id] = { ...meta, nameMap, self: rename(meta.self), participants: (meta.participants || []).map(rename) };
+    await set({ meetings });
+    await saveMeeting(meetings[id], entries);
+    if (future) {
+      const s = await getSettings();
+      const map = { ...(s.nameMap || {}) };
+      for (const k of Object.keys(map)) if (map[k] === from) map[k] = to;
+      map[from.toLowerCase()] = to;
+      await saveSettings({ nameMap: map });
+    }
   }
 
   async function updateMeeting(id, patch) {
@@ -86,6 +138,29 @@ const MT = (() => {
       }
     }
     return turns;
+  }
+
+  // Turns and gaps (stretches with nothing recorded) in time order.
+  function timeline(meta, entries) {
+    const items = groupTurns(entries).map((t) => ({ kind: "turn", ...t }));
+    for (const g of meta.gaps || []) {
+      const i = items.findIndex((x) => (x.kind === "turn" ? x.ts : x.from) > g.from);
+      items.splice(i < 0 ? items.length : i, 0, { kind: "gap", ...g });
+    }
+    return items;
+  }
+
+  const GAP_REASONS = {
+    captions: "Captions were off",
+    paused: "Recording was paused",
+    left: "Not in the call",
+  };
+
+  // "Captions were off 12:40–19:52 (7 min); nothing was recorded"
+  function gapText(meta, g) {
+    const mins = Math.max(1, Math.round((g.to - g.from) / 60000));
+    return `${GAP_REASONS[g.reason] || GAP_REASONS.captions} ${clock(g.from - meta.startedAt)}–${clock(g.to - meta.startedAt)} ` +
+      `(${mins} min); nothing was recorded`;
   }
 
   const pad = (n) => String(n).padStart(2, "0");
@@ -133,7 +208,7 @@ const MT = (() => {
   // Everyone seen in the call (tiles / people panel) plus everyone who spoke.
   function people(meta) {
     const all = [...(meta.participants || []), ...(meta.speakers || [])]
-      .filter((n) => n && !/^(you|unknown)$/i.test(n));
+      .filter((n) => n && !/^(you|unknown|speaker)$/i.test(n));
     const seen = new Map();
     for (const n of all) if (!seen.has(n.toLowerCase())) seen.set(n.toLowerCase(), n);
     return [...seen.values()];
@@ -176,10 +251,10 @@ const MT = (() => {
     // characters, no leading/trailing dots or spaces, and short enough for Windows paths.
     return parts.join(" - ")
       .replace(/[\\/:*?"<>|\u0000-\u001f\u007f]+/g, " ").replace(/\s+/g, " ")
-      .slice(0, 150).replace(/^[.\s]+|[.\s]+$/g, "") || "Meet transcript";
+      .slice(0, 150).replace(/^[.\s]+|[.\s]+$/g, "") || "Meeting transcript";
   }
 
-  // Files are grouped in one folder per day: "Meet Transcripts/2026-10-11/".
+  // Files are grouped in one folder per day: "Meeting Transcripts/2026-10-11/".
   const dayFolder = (meta) => isoDate(meta.startedAt);
 
   // The saved document, as blocks for docx.js: details, speaking time, highlights, transcript.
@@ -191,9 +266,10 @@ const MT = (() => {
       { style: "Title", runs: [{ text: title(meta) }] },
       { runs: [
         ...label("Date", `${dateTime(meta.startedAt)} (${duration(meta)})`),
+        { br: true }, ...label("Platform", platformName(meta)),
         { br: true }, ...label("Participants", people(meta).join(", ") || "—"),
-        { br: true }, { text: "Meeting link: ", bold: true },
-        { text: "meet.google.com/" + meta.code, link: "https://meet.google.com/" + meta.code },
+        ...(link(meta) ? [{ br: true }, { text: "Meeting link: ", bold: true },
+          { text: link(meta).replace(/^https:\/\//, ""), link: link(meta) }] : []),
       ] },
     ];
 
@@ -221,33 +297,44 @@ const MT = (() => {
     }
 
     blocks.push({ style: "Heading1", runs: [{ text: "Transcript" }] });
-    for (const t of groupTurns(entries)) {
+    for (const t of timeline(meta, entries)) {
+      if (t.kind === "gap") {
+        blocks.push({ runs: [{ text: "— " + gapText(meta, t) + " —", italic: true, color: GREY }] });
+        continue;
+      }
       blocks.push({ runs: [{ text: t.speaker, bold: true }, { text: " " }, when(t.ts), { br: true },
         { text: t.lines.map((l) => l.text).join(" ") }] });
     }
-    blocks.push({ runs: [{ text: "Recorded from Google Meet live captions by Meet Transcripts; expect some recognition errors.",
+    blocks.push({ runs: [{ text: `Recorded from ${platformName(meta)} live captions by ${APP}; expect some recognition errors.`,
       italic: true, color: GREY }] });
     return blocks;
   }
 
+  // The meeting's link, for calls that have one (Meet always, Zoom by meeting number).
+  const link = (meta) => meta.link !== undefined ? meta.link : platformOf(meta) === "meet" && meta.code
+    ? "https://meet.google.com/" + meta.code : "";
+
   function toText(meta, entries) {
-    const head = `${title(meta)}\n${dateTime(meta.startedAt)} · ${duration(meta)}\n\n`;
-    return head + groupTurns(entries)
-      .map((t) => `[${clock(t.ts - meta.startedAt)}] ${t.speaker}: ${t.lines.map((l) => l.text).join(" ")}`)
+    const head = `${title(meta)}\n${platformName(meta)} · ${dateTime(meta.startedAt)} · ${duration(meta)}\n\n`;
+    return head + timeline(meta, entries)
+      .map((t) => t.kind === "gap" ? `--- ${gapText(meta, t)} ---`
+        : `[${clock(t.ts - meta.startedAt)}] ${t.speaker}: ${t.lines.map((l) => l.text).join(" ")}`)
       .join("\n\n") + "\n";
   }
 
   function toMarkdown(meta, entries) {
-    const head = `# ${title(meta)}\n\n*${dateTime(meta.startedAt)} · ${duration(meta)} · ` +
+    const head = `# ${title(meta)}\n\n*${platformName(meta)} · ${dateTime(meta.startedAt)} · ${duration(meta)} · ` +
       `${people(meta).join(", ")}*\n\n`;
-    return head + groupTurns(entries)
-      .map((t) => `**${t.speaker}** \`${clock(t.ts - meta.startedAt)}\`  \n${t.lines.map((l) => l.text).join(" ")}`)
+    return head + timeline(meta, entries)
+      .map((t) => t.kind === "gap" ? `*— ${gapText(meta, t)} —*`
+        : `**${t.speaker}** \`${clock(t.ts - meta.startedAt)}\`  \n${t.lines.map((l) => l.text).join(" ")}`)
       .join("\n\n") + "\n";
   }
 
   return {
-    getSettings, saveSettings, listMeetings, getTranscript, saveMeeting, updateMeeting, deleteMeeting,
-    getFile, setFile, groupTurns, clock, dateTime, duration, toText, toMarkdown,
-    FILTERS, highlights, people, others, title, isScheduled, docName, dayFolder, docBlocks,
+    APP, PLATFORMS, platformOf, platformName, mapName,
+    getSettings, saveSettings, listMeetings, getTranscript, saveMeeting, renameSpeaker, updateMeeting, deleteMeeting,
+    getFile, setFile, groupTurns, timeline, gapText, clock, dateTime, duration, toText, toMarkdown,
+    FILTERS, highlights, people, others, title, isScheduled, docName, dayFolder, docBlocks, link,
   };
 })();

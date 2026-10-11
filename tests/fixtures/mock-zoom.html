@@ -1,0 +1,65 @@
+<!doctype html>
+<html><head><title>Zoom</title></head>
+<body>
+<!-- Mimics Zoom's web client: a captions overlay (text only; the speaker is the active-speaker
+     tile) and the "View full transcript" panel that lists every line with names. -->
+<div class="meeting-info-container__topic">Sam Lee's Zoom Meeting</div>
+<div class="speaker-active-container__video-frame"><div class="video-avatar__avatar-name" id="active">Ann Lee</div></div>
+<div class="gallery"><div class="video-avatar__avatar-name">Ben Cho</div><div class="video-avatar__avatar-name">Sam Lee</div></div>
+<div class="footer">
+  <button aria-label="Captions">CC</button>
+  <button class="footer__leave-btn" aria-label="Leave">Leave</button>
+</div>
+<script>
+const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+let overlay = null;
+document.querySelector('[aria-label="Captions"]').onclick = () => {
+  const m = document.createElement("div");
+  m.setAttribute("role", "menu");
+  m.innerHTML = '<div role="menuitem">Show Captions</div><div role="menuitem">View Full Transcript</div>';
+  m.firstChild.onclick = () => {
+    m.remove();
+    overlay = document.createElement("div");
+    overlay.id = "live-transcription-subtitle";
+    document.body.append(overlay);
+    run();
+  };
+  document.body.append(m);
+};
+async function line(speaker, steps) {
+  document.getElementById("active").textContent = speaker;
+  const it = document.createElement("div");
+  it.className = "live-transcription-subtitle__item";
+  overlay.append(it);
+  for (const s of steps) { it.textContent = s; await wait(120); }
+  if (overlay.children.length > 2) overlay.firstElementChild.remove(); // the overlay keeps the latest two lines
+}
+const ANN = "Can everyone see my screen with the quarterly numbers on it?";
+const BEN = "Yes, it looks good. The revenue chart is very clear to me.";
+async function run() {
+  await line("Ann Lee", ["Can everyone", "Can everyone see my screen", ANN]);
+  await line("Ben Cho", ["Yes, it looks good.", BEN]);
+  await wait(1500);
+  // Opening the full transcript: every line again, now with names, plus what comes next.
+  const panel = document.createElement("div");
+  panel.className = "lt-full-transcript__list";
+  const add = (name, text) => {
+    const it = document.createElement("div");
+    it.className = "lt-full-transcript__item";
+    it.innerHTML = '<div class="lt-full-transcript__display-name"></div><div class="lt-full-transcript__message"></div>';
+    it.firstChild.textContent = name;
+    it.lastChild.textContent = text;
+    panel.append(it);
+  };
+  add("Ann Lee", ANN);
+  add("Ben Cho", BEN);
+  document.body.append(panel);
+  await wait(1500);
+  add("Ann Lee", "Great, then let's move on to the hiring plan for next quarter.");
+  window.done = true;
+}
+window.leave = () => {
+  document.body.innerHTML = "<h1>You have left the meeting</h1>";
+};
+</script>
+</body></html>

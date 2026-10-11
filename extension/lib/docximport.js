@@ -1,7 +1,7 @@
 // Reads the .docx files this extension saved back into meetings, so a library that was
 // lost (e.g. the extension was removed, which clears its storage) can be rebuilt.
 //
-// The files hold: a title, a "Date / Participants / Meeting link" paragraph, and a
+// The files hold: a title, a "Date / Platform / Participants / Meeting link" paragraph, and a
 // "Transcript" section of "Speaker [m:ss]" + text paragraphs (see MT.docBlocks).
 // Files re-saved in Word are compressed and split into more runs; both are handled.
 
@@ -82,7 +82,7 @@ const DOCX_IMPORT = (() => {
     const title = paras.find((p) => p.style === "Title")?.text.trim();
     const info = paras.find((p) => /^Date: /m.test(p.text))?.text || "";
     const start = paras.findIndex((p) => /^Heading/.test(p.style) && p.text.trim() === "Transcript");
-    if (!title || start < 0) throw new Error("not a Meet Transcripts document");
+    if (!title || start < 0) throw new Error("not a Meeting Transcripts document");
 
     const day = (fileName.match(/(\d{4})-(\d{2})-(\d{2})/) || []).slice(1).map(Number);
     const dateLine = (info.match(/^Date: (.*)$/m) || [])[1] || "";
@@ -95,7 +95,12 @@ const DOCX_IMPORT = (() => {
 
     const participants = ((info.match(/^Participants: (.*)$/m) || [])[1] || "")
       .split(",").map((s) => s.trim()).filter((s) => s && s !== "—");
-    const code = (info.match(/meet\.google\.com\/([a-z]{3,4}-[a-z]{4}-[a-z]{3,4})/) || [])[1] || "imported";
+    // "Platform:" arrived with Teams and Zoom support; older files are all Google Meet.
+    const platformName = ((info.match(/^Platform: (.*)$/m) || [])[1] || "").trim();
+    const platform = /teams/i.test(platformName) ? "teams" : /zoom/i.test(platformName) ? "zoom" : "meet";
+    const linkText = ((info.match(/^Meeting link: (.*)$/m) || [])[1] || "").trim();
+    const code = (linkText.match(/meet\.google\.com\/([a-z]{3,4}-[a-z]{4}-[a-z]{3,4})/) ||
+      linkText.match(/zoom\.us\/j\/(\d+)/) || [])[1] || (platform === "meet" ? "imported" : platform);
 
     const entries = [];
     for (const p of paras.slice(start + 1)) {
@@ -112,7 +117,9 @@ const DOCX_IMPORT = (() => {
     const leftOver = participants.filter((n) => !named.includes(n));
     const meta = {
       id: `${code}-${startedAt}`,
+      platform,
       code,
+      link: linkText ? "https://" + linkText.replace(/^https?:\/\//, "") : "",
       eventTitle: spontaneous ? "" : title,
       self: spontaneous && leftOver.length === 1 ? leftOver[0] : "",
       startedAt,
@@ -128,8 +135,10 @@ const DOCX_IMPORT = (() => {
     let data;
     try { data = JSON.parse(text); } catch { return null; }
     if (!data || data.app !== "meet-transcripts" || data.kind !== "library" || typeof data.meetings !== "object") return null;
-    const keep = { autoCaptions: "boolean", hideCaptions: "boolean", myName: "string", autoSave: "boolean" };
-    const settings = Object.fromEntries(Object.entries(data.settings || {}).filter(([k, v]) => typeof v === keep[k]));
+    const keep = { autoCaptions: "boolean", hideCaptions: "boolean", myName: "string", autoSave: "boolean",
+      showIndicator: "boolean", platforms: "object", nameMap: "object" };
+    const settings = Object.fromEntries(Object.entries(data.settings || {})
+      .filter(([k, v]) => typeof v === keep[k] && v !== null && !Array.isArray(v)));
     const meetings = Object.values(data.meetings).filter((m) =>
       m && typeof m.id === "string" && Number.isFinite(m.startedAt) && Array.isArray((data.transcripts || {})[m.id]));
     return { settings, meetings, transcripts: data.transcripts, files: data.files || {} };
