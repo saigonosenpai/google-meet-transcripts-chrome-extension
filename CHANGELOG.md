@@ -3,6 +3,13 @@
 Each version here becomes a release on GitHub, with the extension zip attached, as soon as
 it's pushed to `main` with the matching `version` in `extension/manifest.json`.
 
+## 2.2.0
+
+- **A livelier popup.** The status card is now in colour and changes with what's happening:
+  blue when you're not in a call, red while recording, orange when it needs you (paused,
+  or captions are off), grey when recording is turned off for that site. The library
+  tiles get their own colours and icons too.
+
 ## 2.1.0
 
 - **Your library at a glance** in the popup: how many calls you've recorded, their total
