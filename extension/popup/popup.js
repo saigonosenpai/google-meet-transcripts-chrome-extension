@@ -14,9 +14,15 @@ async function refresh() {
   render();
 }
 
+// The status card's colour follows the state: blue when idle, red while recording, orange when attention is needed.
+function setTone(tone) {
+  $("status").dataset.tone = tone;
+}
+
 function render() {
   const dot = $("dot"), state = $("state"), detail = $("detail");
   dot.className = "dot";
+  setTone("idle");
   $("meetActions").hidden = !current || !current.inMeeting;
   $("diagnose").hidden = !current || !current.inMeeting || current.paused || (current.captionsOn && current.count > 0);
   if (!current) {
@@ -28,6 +34,7 @@ function render() {
   }
   const where = MT.PLATFORMS[current.platform].name;
   if (current.disabled) {
+    setTone("off");
     state.textContent = "Not recording " + where;
     detail.textContent = "Turned off below, under Record calls in.";
     return;
@@ -40,12 +47,15 @@ function render() {
   $("pause").textContent = current.paused ? "Resume" : "Pause";
   $("viewCurrent").disabled = !current.meetingId;
   if (current.paused) {
+    setTone("warn");
     dot.classList.add("warn");
     state.textContent = "Paused";
   } else if (current.captionsOn) {
+    setTone("rec");
     dot.classList.add("rec");
     state.textContent = "Recording · " + MT.PLATFORMS[current.platform].short;
   } else {
+    setTone("warn");
     dot.classList.add("warn");
     state.textContent = "Captions are off";
   }

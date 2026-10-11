@@ -10,20 +10,20 @@
     <h1>Meeting Transcripts</h1>
   </header>
 
-  <section id="status" class="hero">
+  <section id="status" class="hero" data-tone="idle">
     <div class="state-row"><span id="dot" class="dot"></span><strong id="state">Checking…</strong></div>
     <p id="detail"></p>
     <div class="actions" id="meetActions" hidden>
       <button id="pause" class="btn"></button>
-      <button id="viewCurrent" class="btn tinted">View live transcript</button>
+      <button id="viewCurrent" class="btn tinted">Live transcript</button>
     </div>
     <button id="diagnose" class="link small" hidden>Captions not being picked up? Copy a report</button>
   </section>
 
   <section class="stats" aria-label="Your library">
-    <button class="stat" id="statCalls" title="Open all transcripts"><b id="calls">–</b><span>calls</span></button>
-    <div class="stat" title="Total length of your recorded calls"><b id="recorded">–</b><span>recorded</span></div>
-    <button class="stat" id="statSize" title="Word documents and library.json in Downloads › Meeting Transcripts. Click to open the folder."><b id="size">–</b><span>on disk</span></button>
+    <button class="stat calls" id="statCalls" title="Open all transcripts"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M4 2.5h5.5L12 5v8.5H4z"/><path d="M6 8h4M6 10.5h4"/></svg><b id="calls">–</b><span>calls</span></button>
+    <div class="stat time" title="Total length of your recorded calls"><svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="5.75"/><path d="M8 5v3l2 1.5"/></svg><b id="recorded">–</b><span>recorded</span></div>
+    <button class="stat disk" id="statSize" title="Word documents and library.json in Downloads › Meeting Transcripts. Click to open the folder."><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M2 4.5h4.5L8 6h6v6.5H2z"/></svg><b id="size">–</b><span>on disk</span></button>
   </section>
   <p class="footnote" id="statsDetail"></p>
 
