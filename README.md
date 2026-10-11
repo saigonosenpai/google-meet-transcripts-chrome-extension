@@ -107,9 +107,9 @@ your history back:
 The extension isn't on the Chrome Web Store, so you load it yourself. It takes about a
 minute and is the same on Windows and Mac.
 
-1. **Download it.** Go to the [latest release](https://github.com/saigonosenpai/google-meet-transcripts-chrome-extension/releases/latest)
+1. **Download it.** Go to the [latest release](https://github.com/saigonosenpai/meet-transcripts-chrome-extension/releases/latest)
    and, under **Assets**, download `meeting-transcripts-vX.Y.Z.zip`.
-   (Or, if you use git: `git clone https://github.com/saigonosenpai/google-meet-transcripts-chrome-extension.git`;
+   (Or, if you use git: `git clone https://github.com/saigonosenpai/meet-transcripts-chrome-extension.git`;
    then load its `extension` folder in step 5.)
 2. **Unzip it somewhere permanent**, for example `Documents\meeting-transcripts` (Windows)
    or `~/Documents/meeting-transcripts` (Mac). Chrome runs the extension from this folder,
@@ -133,7 +133,7 @@ Otherwise just join a call.
 
 **The short version: replace the files, click reload. Don't click Remove.**
 
-1. Download the new version's ZIP from the [latest release](https://github.com/saigonosenpai/google-meet-transcripts-chrome-extension/releases/latest),
+1. Download the new version's ZIP from the [latest release](https://github.com/saigonosenpai/meet-transcripts-chrome-extension/releases/latest),
    or run `git pull` if you cloned it. To hear about new versions, click **Watch → Custom →
    Releases** at the top of this page.
 2. Copy the new files **over your existing folder**, the one you loaded in step 5 of
@@ -242,7 +242,7 @@ people in them.
 Teams and Zoom change their pages from time to time. If a call isn't being picked up, the
 popup offers **Captions not being picked up? Copy a report**. It copies a description of
 the page's layout around the captions (never what anyone said) that you can paste into a
-[GitHub issue](https://github.com/saigonosenpai/google-meet-transcripts-chrome-extension/issues),
+[GitHub issue](https://github.com/saigonosenpai/meet-transcripts-chrome-extension/issues),
 so it can be fixed in the next version.
 
 ## Where your files go and how they're named
@@ -379,7 +379,7 @@ The host or account admin can turn them on in the Zoom web portal's meeting sett
 
 **Teams or Zoom shows captions but nothing is recorded.** Their page has probably changed.
 Open the popup in that tab and click **Captions not being picked up? Copy a report**, then
-paste it into a [GitHub issue](https://github.com/saigonosenpai/google-meet-transcripts-chrome-extension/issues).
+paste it into a [GitHub issue](https://github.com/saigonosenpai/meet-transcripts-chrome-extension/issues).
 The report describes the page's layout only, never the captions.
 
 **Files aren't being saved, or a Save dialog appears every time.** Chrome's *Ask where to
@@ -405,7 +405,7 @@ keeps happening.
 ## Version history
 
 What changed in each version is in [CHANGELOG.md](CHANGELOG.md) and on the
-[Releases](https://github.com/saigonosenpai/google-meet-transcripts-chrome-extension/releases) page.
+[Releases](https://github.com/saigonosenpai/meet-transcripts-chrome-extension/releases) page.
 
 ## For developers
 
