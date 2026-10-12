@@ -57,9 +57,10 @@ const MT_PLATFORM = (() => {
   function participants() {
     const names = [];
     for (const tile of document.querySelectorAll(TILE_SEL)) {
-      const el = [...tile.querySelectorAll(TILE_NAME_SEL)].find((e) => !isIcon(e) && e.textContent.trim());
+      const el = [...tile.querySelectorAll(TILE_NAME_SEL)].find((e) => !isIcon(e) && e.innerText.trim());
       // Your own tile is often labelled "You"; the recorder adds your real name.
-      if (el && !tile.querySelector("[data-self-name]")) names.push(el.textContent);
+      // innerText, not textContent: the name element can hold a hidden copy of the name.
+      if (el && !tile.querySelector("[data-self-name]")) names.push(el.innerText);
     }
     for (const item of document.querySelectorAll(PEOPLE_SEL)) names.push(item.getAttribute("aria-label"));
     return names.map(cleanName);

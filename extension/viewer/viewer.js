@@ -333,10 +333,10 @@ function bindActions() {
   });
   document.addEventListener("click", () => setMenu(false));
   document.addEventListener("keydown", (e) => { if (e.key === "Escape") setMenu(false); });
-  $("exportMenu").addEventListener("click", (e) => {
+  $("exportMenu").addEventListener("click", async (e) => {
     const kind = e.target.closest("button")?.dataset.export;
     setMenu(false);
-    if (kind === "docx") download(fileBase() + ".docx", DOCX.build(MT.docBlocks(current, entries)), DOCX.MIME);
+    if (kind === "docx") download(fileBase() + ".docx", await DOCX.build(MT.docBlocks(current, entries)), DOCX.MIME);
     if (kind === "md") download(fileBase() + ".md", MT.toMarkdown(current, entries), "text/markdown");
     if (kind === "txt") download(fileBase() + ".txt", MT.toText(current, entries), "text/plain");
     if (kind === "json") download(fileBase() + ".json", JSON.stringify({ ...current, entries }, null, 2), "application/json");

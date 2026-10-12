@@ -209,9 +209,21 @@ const MT = (() => {
   // text next to a name. No one's name is lowercase words joined by underscores.
   const isIconName = (n) => /^[a-z0-9]+(_[a-z0-9]+)+$/.test(n);
 
+  // A name read together with a hidden copy of itself, whole or cut short:
+  // "Isuru IlangarathneIsuru Ilangarathne", "Chathuranga BalasooriyaChathuranga Bala".
+  // The copy starts right after a lowercase letter, with no space, and repeats the name's
+  // start: all of it, or at least past its first word. "McDonald" and "Ann McAnn" stay.
+  function dedupeName(n) {
+    for (let k = 2; k < n.length - 1; k++) {
+      const rest = n.slice(k);
+      if ((rest.length === k || rest.includes(" ")) && /\p{Ll}/u.test(n[k - 1]) && /\p{Lu}/u.test(n[k]) && n.startsWith(rest)) return n.slice(0, k);
+    }
+    return n;
+  }
+
   // Everyone seen in the call (tiles / people panel) plus everyone who spoke.
   function people(meta) {
-    const all = [...(meta.participants || []), ...(meta.speakers || [])]
+    const all = [...(meta.participants || []), ...(meta.speakers || [])].map((n) => n && dedupeName(n))
       .filter((n) => n && !/^(you|unknown|speaker)$/i.test(n) && !isIconName(n));
     const seen = new Map();
     for (const n of all) if (!seen.has(n.toLowerCase())) seen.set(n.toLowerCase(), n);
@@ -336,7 +348,7 @@ const MT = (() => {
   }
 
   return {
-    APP, PLATFORMS, platformOf, platformName, mapName, isIconName,
+    APP, PLATFORMS, platformOf, platformName, mapName, isIconName, dedupeName,
     getSettings, saveSettings, listMeetings, getTranscript, saveMeeting, renameSpeaker, updateMeeting, deleteMeeting,
     getFile, setFile, groupTurns, timeline, gapText, clock, dateTime, duration, toText, toMarkdown,
     FILTERS, highlights, people, others, title, isScheduled, docName, dayFolder, docBlocks, link,

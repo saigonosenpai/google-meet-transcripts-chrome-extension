@@ -78,7 +78,7 @@ async function doSave(id, { manual = false } = {}) {
   const prev = (await MT.getFile(id)) || {};
   const rel = await uniquePath(id, MT.dayFolder(meta), MT.docName(meta));
   const blocks = MT.docBlocks(meta, entries);
-  const h = hash(rel + JSON.stringify(blocks));
+  const h = hash(DOCX.FORMAT + rel + JSON.stringify(blocks)); // a new format rewrites the file
   if (prev.downloadId && prev.hash === h && !prev.error && !manual) return prev;
 
   try {
@@ -92,7 +92,7 @@ async function doSave(id, { manual = false } = {}) {
     let item;
     try {
       const downloadId = await chrome.downloads.download({
-        url: DOCX.dataUrl(DOCX.build(blocks)),
+        url: DOCX.dataUrl(await DOCX.build(blocks)),
         filename: rel,
         conflictAction: "overwrite",
         saveAs: false,
@@ -126,7 +126,8 @@ const IDLE_MIN = 2;
 
 // Files saved by older versions used other names/folders. Re-save them once in the current
 // layout. Runs whenever the worker starts, so it doesn't depend on Chrome reporting the update.
-const LAYOUT = 3; // 2: one folder per day, "Call with …"; 3: "Meeting Transcripts" instead of "Meet Transcripts"
+const LAYOUT = 4; // 2: one folder per day, "Call with …"; 3: "Meeting Transcripts" instead of "Meet Transcripts";
+                  // 4: compressed .docx, names without icon glyphs or doubled names
 
 async function migrateFiles() {
   const all = await chrome.storage.local.get(null);
