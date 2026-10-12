@@ -3,6 +3,15 @@
 Each version here becomes a release on GitHub, with the extension zip attached, as soon as
 it's pushed to `main` with the matching `version` in `extension/manifest.json`.
 
+## 2.2.3
+
+- **Simpler to install.** The download is now always called `meeting-transcripts.zip`,
+  and unzipping it gives the folder to select in *Load unpacked* directly, with
+  `manifest.json` inside, instead of a folder within a folder (which led to *"Manifest
+  file is missing or unreadable"*). The zip includes a short `INSTALL.txt`, and the
+  README starts with step-by-step install instructions and a screenshot. The extension
+  itself is unchanged.
+
 ## 2.2.2
 
 - **Word documents are about 4 times smaller.** They're now compressed, as Word itself
