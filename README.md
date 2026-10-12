@@ -17,11 +17,66 @@ browsers.
 
 ---
 
+## Install
+
+The extension isn't on the Chrome Web Store, so you add it to Chrome yourself. It takes
+about two minutes and works the same on Windows and Mac.
+
+**1. Download** [**meeting-transcripts.zip**](https://github.com/saigonosenpai/meet-transcripts-chrome-extension/releases/latest/download/meeting-transcripts.zip)
+(always the latest version).
+
+**2. Unzip it into a permanent place.** Chrome runs the extension from this folder, so put
+it somewhere you won't clean up, and don't delete it later.
+- **Windows:** right-click the ZIP › **Extract All…** › click **Browse** and choose
+  **Documents** › **Extract**.
+- **Mac:** double-click the ZIP, then drag the new `meeting-transcripts` folder into
+  **Documents**.
+
+You now have a folder called **`meeting-transcripts`** with the extension's files directly
+inside it, including **`manifest.json`**:
+
+```
+Documents
+└── meeting-transcripts        ← select this folder in step 4
+    ├── manifest.json
+    ├── background.js
+    ├── INSTALL.txt
+    ├── content
+    ├── popup
+    └── …
+```
+
+**3. Open `chrome://extensions`** (type it into the address bar; in Edge it's
+`edge://extensions`) and turn on **Developer mode** in the top-right corner ①.
+
+**4. Click Load unpacked** ② and select the **`meeting-transcripts`** folder from step 2,
+the one that has `manifest.json` directly inside it. Then click **Select Folder**.
+
+![chrome://extensions: the Developer mode switch top right (1), and the Load unpacked button that appears top left (2)](docs/screenshots/install-load-unpacked.png)
+
+**5. Pin it:** click the puzzle-piece icon in Chrome's toolbar, then the pin next to
+*Meeting Transcripts*, so its badge shows during calls.
+
+A "Meeting Transcripts" tab opens to welcome you. That's it: join a call and it records.
+If you've used the extension before, click **Restore from folder…** on that tab (see
+[library.json](#your-history-is-safe-libraryjson)).
+
+> **"Manifest file is missing or unreadable"?** The folder you selected doesn't contain
+> `manifest.json` itself; usually it's one level too high (for example `Downloads`, or a
+> folder holding another `meeting-transcripts` folder). Click **Load unpacked** again and
+> pick the folder that has `manifest.json` in it.
+>
+> Chrome may also show a *"Disable developer mode extensions"* notice when it starts.
+> That's normal for extensions added this way; close it with the ✕ (not *Disable*).
+
+If you use git, you can instead clone this repository and select its `extension` folder
+in step 4.
+
 ## Contents
 
+- [Install](#install)
 - [What it does](#what-it-does)
 - [Screenshots](#screenshots)
-- [Install](#install)
 - [Update to a new version](#update-to-a-new-version)
 - [Using it](#using-it)
 - [Teams and Zoom](#teams-and-zoom)
@@ -102,44 +157,17 @@ your history back:
 
 ![The empty library after a reinstall, with the Restore from folder button highlighted](docs/screenshots/restore.png)
 
-## Install
-
-The extension isn't on the Chrome Web Store, so you load it yourself. It takes about a
-minute and is the same on Windows and Mac.
-
-1. **Download it.** Go to the [latest release](https://github.com/saigonosenpai/meet-transcripts-chrome-extension/releases/latest)
-   and, under **Assets**, download `meeting-transcripts-vX.Y.Z.zip`.
-   (Or, if you use git: `git clone https://github.com/saigonosenpai/meet-transcripts-chrome-extension.git`;
-   then load its `extension` folder in step 5.)
-2. **Unzip it somewhere permanent**, for example `Documents\meeting-transcripts` (Windows)
-   or `~/Documents/meeting-transcripts` (Mac). Chrome runs the extension from this folder,
-   so don't leave it in Downloads where it might get cleaned up, and don't delete it later.
-   The ZIP holds a `meeting-transcripts` folder; that's the one to pick in step 5 (it
-   directly contains `manifest.json`).
-3. Open **`chrome://extensions`** in the address bar (Edge: `edge://extensions`).
-4. Turn on **Developer mode** (the switch in the top-right corner).
-5. Click **Load unpacked** and select the folder from step 2.
-6. **Pin it:** click the puzzle-piece icon in the toolbar, then the pin next to
-   *Meeting Transcripts*, so you can see its badge during calls.
-
-A "Meeting Transcripts" tab opens to welcome you. If you've used the extension before,
-click **Restore from folder…** there (see [library.json](#your-history-is-safe-libraryjson)).
-Otherwise just join a call.
-
-> Chrome may show a *"Disable developer mode extensions"* notice when it starts. That's
-> normal for extensions loaded this way; click the ✕ (not *Disable*).
-
 ## Update to a new version
 
 **The short version: replace the files, click reload. Don't click Remove.**
 
-1. Download the new version's ZIP from the [latest release](https://github.com/saigonosenpai/meet-transcripts-chrome-extension/releases/latest),
+1. Download the new [**meeting-transcripts.zip**](https://github.com/saigonosenpai/meet-transcripts-chrome-extension/releases/latest/download/meeting-transcripts.zip),
    or run `git pull` if you cloned it. To hear about new versions, click **Watch → Custom →
    Releases** at the top of this page.
-2. Copy the new files **over your existing folder**, the one you loaded in step 5 of
-   Install, replacing everything. On Windows, open the ZIP, open the folder inside it,
-   select all, and paste into your folder choosing *Replace the files in the destination*.
-   On Mac, unzip and drag the contents of the new folder into yours, choosing *Replace*.
+2. Copy the new files **over your existing folder**, the one you selected in step 4 of
+   Install, replacing everything. On Windows, open the ZIP, select all, copy, and paste
+   into your folder choosing *Replace the files in the destination*. On Mac, unzip, open
+   the new folder, select all and drag into yours, choosing *Replace*.
 3. Open `chrome://extensions` and click the **reload arrow (↻)** on the extension.
 4. Reload any open call tabs.
 
@@ -368,6 +396,10 @@ Each computer keeps its own library. To move your history, copy the `Meeting Tra
 folder to the new computer's Downloads and use **Restore from folder…**.
 
 ## Troubleshooting
+
+**"Manifest file is missing or unreadable" when loading it.** You selected a folder that
+doesn't directly contain `manifest.json`, usually the one above it. Select the
+`meeting-transcripts` folder that has `manifest.json` inside (see [Install](#install), step 4).
 
 **The badge says `CC` and nothing is recorded.** Captions are off. Click the pill in the
 call, or turn captions on yourself: **c** or the CC button in Meet, **More › Language and

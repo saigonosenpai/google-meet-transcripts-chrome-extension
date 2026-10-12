@@ -55,10 +55,13 @@ jobs:
       - name: Build the extension zip
         if: steps.version.outputs.new == 'true'
         run: |
-          mkdir -p dist/meeting-transcripts
-          cp -r extension/. dist/meeting-transcripts/
-          cp LICENSE README.md dist/meeting-transcripts/
-          cd dist && zip -qr "meeting-transcripts-v${{ steps.version.outputs.version }}.zip" meeting-transcripts
+          # The files sit at the top of the zip, so the folder that unzipping creates (on Windows
+          # and Mac alike) is the one to pick in Load unpacked: no inner folder to miss.
+          # A fixed name gives a stable link: releases/latest/download/meeting-transcripts.zip
+          mkdir -p dist/pkg
+          cp -r extension/. dist/pkg/
+          cp LICENSE README.md docs/INSTALL.txt dist/pkg/
+          cd dist/pkg && zip -qr ../meeting-transcripts.zip .
 
       - name: Write the release notes
         if: steps.version.outputs.new == 'true'
@@ -70,9 +73,9 @@ jobs:
 
           ---
 
-          **Install:** download \`meeting-transcripts-v$version.zip\` below, unzip it somewhere permanent, open \`chrome://extensions\`, turn on **Developer mode**, click **Load unpacked** and pick the \`meeting-transcripts\` folder.
+          **Install:** download \`meeting-transcripts.zip\` below and unzip it into a permanent place, such as Documents. Open \`chrome://extensions\`, turn on **Developer mode**, click **Load unpacked** and select the unzipped \`meeting-transcripts\` folder (the one with \`manifest.json\` in it).
 
-          **Update:** copy the files from the new folder over your existing extension folder, then click the reload arrow (↻) on the extension in \`chrome://extensions\`. Don't click Remove.
+          **Update:** copy the new files over your existing extension folder, replacing them, then click the reload arrow (↻) on the extension in \`chrome://extensions\`. Don't click Remove.
 
           Full instructions are in the [README](https://github.com/${{ github.repository }}#readme).
           NOTES
@@ -81,5 +84,5 @@ jobs:
         if: steps.version.outputs.new == 'true'
         run: |
           version=${{ steps.version.outputs.version }}
-          gh release create "v$version" "dist/meeting-transcripts-v$version.zip" \
+          gh release create "v$version" "dist/meeting-transcripts.zip" \
             --title "$(jq -r .name extension/manifest.json) $version" --notes-file notes.md --target "$GITHUB_SHA"

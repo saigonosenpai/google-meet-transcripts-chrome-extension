@@ -1,0 +1,24 @@
+MEETING TRANSCRIPTS - HOW TO INSTALL
+====================================
+
+1. Move this folder somewhere permanent, for example Documents.
+   Chrome runs the extension from this folder: don't delete it later.
+
+2. In Chrome, go to  chrome://extensions  (Edge: edge://extensions)
+
+3. Turn on "Developer mode" (top-right corner).
+
+4. Click "Load unpacked" and select THIS folder: the one that contains
+   this INSTALL.txt file and manifest.json.
+
+   "Manifest file is missing or unreadable"? You picked a folder one level
+   too high. Open it and pick the folder inside that has manifest.json.
+
+5. Pin it: click the puzzle-piece icon in Chrome's toolbar, then the pin
+   next to Meeting Transcripts.
+
+UPDATING: copy the new version's files over this folder (replace all), then
+click the reload arrow on the extension in chrome://extensions.
+Don't click Remove: that deletes your transcript history from Chrome.
+
+Full instructions: https://github.com/saigonosenpai/meet-transcripts-chrome-extension#readme
