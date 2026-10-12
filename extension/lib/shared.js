@@ -205,10 +205,14 @@ const MT = (() => {
     return out;
   }
 
+  // Icon-font ligatures such as "keep_outline" or "frame_person" that a call page can draw as
+  // text next to a name. No one's name is lowercase words joined by underscores.
+  const isIconName = (n) => /^[a-z0-9]+(_[a-z0-9]+)+$/.test(n);
+
   // Everyone seen in the call (tiles / people panel) plus everyone who spoke.
   function people(meta) {
     const all = [...(meta.participants || []), ...(meta.speakers || [])]
-      .filter((n) => n && !/^(you|unknown|speaker)$/i.test(n));
+      .filter((n) => n && !/^(you|unknown|speaker)$/i.test(n) && !isIconName(n));
     const seen = new Map();
     for (const n of all) if (!seen.has(n.toLowerCase())) seen.set(n.toLowerCase(), n);
     return [...seen.values()];
@@ -332,7 +336,7 @@ const MT = (() => {
   }
 
   return {
-    APP, PLATFORMS, platformOf, platformName, mapName,
+    APP, PLATFORMS, platformOf, platformName, mapName, isIconName,
     getSettings, saveSettings, listMeetings, getTranscript, saveMeeting, renameSpeaker, updateMeeting, deleteMeeting,
     getFile, setFile, groupTurns, timeline, gapText, clock, dateTime, duration, toText, toMarkdown,
     FILTERS, highlights, people, others, title, isScheduled, docName, dayFolder, docBlocks, link,

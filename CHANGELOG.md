@@ -3,6 +3,14 @@
 Each version here becomes a release on GitHub, with the extension zip attached, as soon as
 it's pushed to `main` with the matching `version` in `extension/manifest.json`.
 
+## 2.2.1
+
+- **Fixed: icon names in file names.** In some Meet calls, the names of the pin and
+  framing icons on video tiles (`keep_outline`, `frame_person`, `keep_off`) were taken
+  for participants, giving files like *Weekly WIP - keep_outline, frame_person, …*. They're
+  now ignored. For a call that already got such a name, open it in All Transcripts and
+  click **Save again**: the file is saved under the right name and the old one removed.
+
 ## 2.2.0
 
 - **A livelier popup.** The status card is now in colour and changes with what's happening:
