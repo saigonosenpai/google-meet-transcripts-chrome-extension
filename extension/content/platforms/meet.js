@@ -48,10 +48,16 @@ const MT_PLATFORM = (() => {
     return t && t !== code && !/^(google )?meet$/i.test(t) ? t : "";
   }
 
+  // Meet's icons are text in an icon font ("keep_outline", "frame_person"), and they carry
+  // the same notranslate class as names, so skip anything hidden from screen readers or
+  // drawn in a symbol font.
+  const isIcon = (el) => !!el.closest('[aria-hidden="true"]') || /icon|symbol/i.test(el.getAttribute("class") || "") ||
+    /symbols|icons/i.test(getComputedStyle(el).fontFamily) || MT.isIconName(el.textContent.trim());
+
   function participants() {
     const names = [];
     for (const tile of document.querySelectorAll(TILE_SEL)) {
-      const el = tile.querySelector(TILE_NAME_SEL);
+      const el = [...tile.querySelectorAll(TILE_NAME_SEL)].find((e) => !isIcon(e) && e.textContent.trim());
       // Your own tile is often labelled "You"; the recorder adds your real name.
       if (el && !tile.querySelector("[data-self-name]")) names.push(el.textContent);
     }
