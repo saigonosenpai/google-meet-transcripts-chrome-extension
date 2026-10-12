@@ -276,24 +276,70 @@
   function attach(el) {
     if (observer) observer.disconnect();
     region = el;
+    applyHide(); // also undoes it for a caption area that's gone
     if (!el) return;
-    applyHide();
     let pending = false;
     observer = new MutationObserver(() => {
       if (pending) return;
       pending = true;
-      setTimeout(() => { pending = false; scan(); }, 250);
+      setTimeout(() => { pending = false; applyHide(); scan(); }, 250); // the page may re-render around the captions
     });
     observer.observe(el, { childList: true, subtree: true, characterData: true });
     ensureSession().then(scan);
   }
 
+  // Hiding captions: the caption area is lifted out of the page (fixed, off-screen, invisible)
+  // rather than display:none, so the page keeps rendering text we can read. The containers
+  // it leaves empty are collapsed, so the call's video gets the space back. A container is
+  // only collapsed while it holds no video, no participant tile and no more than a third
+  // of the window: never the call layout itself.
+  const HIDE_CSS = `
+    .mt-hidden-captions { position: fixed !important; left: -10000px !important; top: 0 !important;
+      width: var(--mt-width, 40rem) !important; max-height: none !important; opacity: 0 !important; pointer-events: none !important; }
+    .mt-collapsed { height: 0 !important; min-height: 0 !important; max-height: 0 !important; flex: 0 0 0 !important;
+      padding-top: 0 !important; padding-bottom: 0 !important; margin-top: 0 !important; margin-bottom: 0 !important;
+      border-width: 0 !important; overflow: hidden !important; }`;
+  let collapsed = [];
+
+  function collapsible(el) {
+    if (!el || el === document.body || el === document.documentElement) return false;
+    if (el.querySelector("video, [data-participant-id]")) return false;
+    const r = el.getBoundingClientRect();
+    return r.height <= window.innerHeight / 3 || el.classList.contains("mt-collapsed");
+  }
+
   function applyHide() {
-    if (!region) return;
-    // Opacity (not display:none) so the page keeps rendering text we can read.
-    const hide = settings.hideCaptions && enabled();
-    region.style.opacity = hide ? "0" : "";
-    region.style.pointerEvents = hide ? "none" : "";
+    const hide = !!region && settings.hideCaptions && enabled();
+    if (hide && !document.getElementById("mt-hide-css")) {
+      const style = document.createElement("style");
+      style.id = "mt-hide-css";
+      style.textContent = HIDE_CSS;
+      (document.head || document.documentElement).append(style);
+    }
+    document.querySelectorAll(".mt-hidden-captions").forEach((el) => { if (el !== region || !hide) el.classList.remove("mt-hidden-captions"); });
+    // Lift the captions out first, so the containers are measured without them.
+    if (hide && !region.classList.contains("mt-hidden-captions")) {
+      region.style.setProperty("--mt-width", Math.max(320, region.getBoundingClientRect().width) + "px");
+      region.classList.add("mt-hidden-captions");
+    }
+    const chain = [];
+    if (hide) for (let el = region.parentElement, i = 0; i < 6 && collapsible(el); el = el.parentElement, i++) chain.push(el);
+    for (const el of collapsed) if (!chain.includes(el)) el.classList.remove("mt-collapsed");
+    for (const el of chain) el.classList.add("mt-collapsed");
+    collapsed = chain;
+  }
+
+  // Where the caption area sits and what holds it: sizes and structure, never text.
+  function layoutReport() {
+    if (!region) return null;
+    const lines = [`window ${window.innerWidth}×${window.innerHeight}, hide ${settings.hideCaptions ? "on" : "off"}`];
+    for (let el = region, i = 0; el && el !== document.documentElement && i < 10; el = el.parentElement, i++) {
+      const r = el.getBoundingClientRect(), cs = getComputedStyle(el);
+      lines.push(`${"  ".repeat(i)}${describe(el)} ${Math.round(r.width)}×${Math.round(r.height)} at ${Math.round(r.top)}` +
+        ` ${cs.display}/${cs.position}${cs.flex !== "0 1 auto" ? " flex " + cs.flex : ""}${cs.height !== "auto" ? " h " + cs.height : ""}` +
+        `${el.classList.contains("mt-collapsed") ? " COLLAPSED" : ""}${el.querySelector("video") ? " +video" : ""} children ${el.children.length}`);
+    }
+    return lines.join("\n");
   }
 
   async function tryEnableCaptions(force = false) {
@@ -463,6 +509,7 @@
       blocks: region ? P.blocks(region).length : 0,
       linesRecorded: session ? session.entries.length : 0,
       captionArea: region ? outline(region, 3) : null,
+      captionLayout: layoutReport(),
       candidates: candidates.map((el) => outline(el, 2)),
     };
   }

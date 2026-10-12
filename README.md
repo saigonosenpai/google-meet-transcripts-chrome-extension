@@ -220,7 +220,7 @@ pop-up in the middle of your meeting.
 
 | Setting | What it does |
 |---|---|
-| Hide captions on screen | Keeps recording but hides the caption overlay |
+| Hide captions on screen | Keeps recording but hides the captions, and gives the space they took back to the video |
 | Show indicator in calls | The *Recording captions* pill in the corner of the call |
 | Your name | Used instead of "You" in transcripts. Normally read from your account; set it to override |
 | Record calls in | Google Meet, Microsoft Teams, Zoom: turn off any you don't want recorded |

@@ -1,16 +1,28 @@
 <!doctype html>
-<html><head><title>Meet</title></head>
+<html><head><title>Meet</title>
+<style>
+  /* Laid out like Meet: the video stage takes what the caption strip and the controls leave. */
+  body { margin: 0; height: 100vh; display: flex; flex-direction: column; }
+  #stage { flex: 1; min-height: 0; }
+  #capbar { padding: 12px 0; }
+  #capbar > div { min-height: 140px; }
+  #controls { height: 80px; flex: none; }
+</style></head>
 <body>
+<main id="stage"><video></video>
 <!-- Mimics Meet's caption DOM: one block per speaker turn, text revised in place. -->
 <!-- Account button from the "Ready to join?" screen; the extension reads your name from it. -->
 <a aria-label="Google Account: Sam Lee  (sam@example.com)" href="#">S</a>
-<button aria-label="Turn on captions (c)" aria-pressed="false" id="cc">CC</button>
 <div data-participant-id="p1"><div class="zWGUib">Alice</div></div>
 <!-- Real tiles carry icon glyphs (pin, framing) marked notranslate, ahead of the name. -->
 <div data-participant-id="p2"><button><i class="google-symbols notranslate" aria-hidden="true">keep_outline</i></button><div class="zWGUib">Bob</div></div>
 <!-- ...and the name element can hold a second, hidden (sometimes truncated) copy of the name. -->
 <div data-participant-id="p3"><span class="notranslate">frame_person</span><div class="notranslate"><span>Carol Diaz</span><span style="display:none">Carol D</span></div></div>
 <div data-participant-id="p4"><div data-self-name="You" class="zWGUib notranslate">You</div></div>
+</main>
+<!-- The caption strip, between the stage and the controls; empty until captions are on. -->
+<div id="capbar" hidden><div></div></div>
+<footer id="controls"><button aria-label="Turn on captions (c)" aria-pressed="false" id="cc">CC</button></footer>
 <script>
 // Calendar meetings show their title in the tab; spontaneous calls show only the code.
 const scheduled = location.pathname === "/abc-defg-hij";
@@ -22,7 +34,8 @@ document.getElementById("cc").onclick = (e) => {
   region = document.createElement("div");
   region.setAttribute("role", "region");
   region.setAttribute("aria-label", "Captions");
-  document.body.append(region);
+  document.getElementById("capbar").hidden = false;
+  document.querySelector("#capbar > div").append(region);
   run();
 };
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));

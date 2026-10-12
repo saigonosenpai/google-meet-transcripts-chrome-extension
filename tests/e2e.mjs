@@ -220,6 +220,57 @@ assert.equal(restored.myName, "Sam Lee");
 assert.equal(restored.hideCaptions, true);
 console.log("restored meetings:", titlesAfter.join(" | "));
 
+// --- hiding captions: the caption strip gives its space back, and recording goes on ---------------
+{
+  // "Hide captions on screen" is on (restored above).
+  const hp = await ctx.newPage();
+  await hp.setViewportSize({ width: 1000, height: 700 });
+  await hp.goto("https://meet.google.com/hid-ecap-tns");
+  await hp.waitForFunction(() => window.done, null, { timeout: 30000 });
+  await hp.waitForTimeout(800);
+  const layout = () => hp.evaluate(() => ({
+    stage: document.getElementById("stage").getBoundingClientRect().height,
+    strip: document.getElementById("capbar").getBoundingClientRect().height,
+    captionsLeft: document.querySelector('[role="region"]').getBoundingClientRect().left,
+    controls: document.getElementById("controls").getBoundingClientRect().height,
+  }));
+  const hidden = await layout();
+  console.log("captions hidden:", JSON.stringify(hidden));
+  assert.equal(hidden.strip, 0, "caption strip collapsed");
+  assert.equal(hidden.stage, 700 - 80, "video stage gets the space back");
+  assert.equal(hidden.controls, 80, "controls untouched");
+  assert.ok(hidden.captionsLeft < -5000, "captions moved off-screen");
+  const recordedLines = () => sw.evaluate(async () => {
+    const m = Object.values((await chrome.storage.local.get("meetings")).meetings || {}).find((x) => x.code === "hid-ecap-tns");
+    return m ? (await chrome.storage.local.get("t:" + m.id))["t:" + m.id] || [] : [];
+  });
+  let lines = [];
+  for (let i = 0; i < 40 && !lines.some((e) => e.text.includes("Great, thanks everyone.")); i++) {
+    lines = await recordedLines();
+    await hp.waitForTimeout(250);
+  }
+  assert.ok(lines.some((e) => e.text.includes("Great, thanks everyone.")), "still recording while hidden");
+  // "Copy a report" includes the layout around the captions, never what was said.
+  const report = await sw.evaluate(async () => {
+    const [tab] = await chrome.tabs.query({ url: "https://meet.google.com/hid-ecap-tns" });
+    return chrome.tabs.sendMessage(tab.id, { type: "diagnose" });
+  });
+  console.log("caption layout report:\n" + report.captionLayout);
+  assert.match(report.captionLayout, /COLLAPSED/);
+  assert.ok(!/launch|Friday|thanks/i.test(JSON.stringify(report)), "no caption text in the report");
+  // Switching it off brings the strip back.
+  await sw.evaluate(() => MT.saveSettings({ hideCaptions: false }));
+  await hp.waitForTimeout(500);
+  const shown = await layout();
+  assert.ok(shown.strip >= 140 && shown.captionsLeft >= 0 && shown.stage < 700 - 80 - 140, "strip back: " + JSON.stringify(shown));
+  await sw.evaluate(() => MT.saveSettings({ hideCaptions: true }));
+  await hp.waitForTimeout(500);
+  // Now with a strip full of captions (taller than when the call began): still collapsed.
+  assert.equal((await layout()).strip, 0, "collapsed again");
+  await hp.close();
+  console.log("hide captions: strip collapsed, stage", hidden.stage, "px, still recording; off again:", shown.strip, "px strip");
+}
+
 // --- Microsoft Teams ------------------------------------------------------------------------------
 await v.evaluate(() => MT.saveSettings({ hideCaptions: false }));
 await ctx.route("https://teams.microsoft.com/**", (r) => r.fulfill({ contentType: "text/html", body: fixture("mock-teams.html") }));

@@ -3,6 +3,17 @@
 Each version here becomes a release on GitHub, with the extension zip attached, as soon as
 it's pushed to `main` with the matching `version` in `extension/manifest.json`.
 
+## 2.3.0
+
+- **Hide captions on screen now hides the caption strip too.** Captions still have to be
+  on (they're what gets recorded), but with this switch on they're moved out of the way
+  completely: the empty strip they left at the bottom of the call is gone and the video
+  gets its full height back. Turn the switch off and the captions come back where they
+  were.
+- **Copy a report** now also describes the layout around the captions (sizes and
+  structure, never what was said), to fix this quickly if a call page lays out
+  differently.
+
 ## 2.2.3
 
 - **Simpler to install.** The download is now always called `meeting-transcripts.zip`,
