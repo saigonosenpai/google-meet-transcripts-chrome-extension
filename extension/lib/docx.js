@@ -3,15 +3,15 @@
 //   blocks: [{ style: "Title" | "Heading1" | "Heading2" | "Normal" | "Bullet",
 //              runs: [{ text, bold, italic, color, link, br }] }]
 //
-// A .docx is a zip of a few XML parts; files are stored uncompressed, which keeps the
-// writer tiny and is valid for Word, Google Docs and LibreOffice.
+// A .docx is a zip of a few XML parts, deflated with the browser's own CompressionStream
+// (as Word does), which makes a transcript several times smaller than storing them as is.
 
 const DOCX = (() => {
   const enc = new TextEncoder();
   const xml = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c])
     .replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g, "");
 
-  // --- zip (store only) ---------------------------------------------------------------
+  // --- zip (deflate) ------------------------------------------------------------------
 
   const CRC = new Uint32Array(256).map((_, n) => {
     let c = n;
@@ -24,19 +24,24 @@ const DOCX = (() => {
     return (c ^ 0xffffffff) >>> 0;
   }
 
-  function zip(files) {
+  async function deflate(bytes) {
+    const stream = new Blob([bytes]).stream().pipeThrough(new CompressionStream("deflate-raw"));
+    return new Uint8Array(await new Response(stream).arrayBuffer());
+  }
+
+  async function zip(files) {
     const parts = [], central = [];
     let offset = 0;
     for (const [name, text] of files) {
-      const nameBytes = enc.encode(name), data = enc.encode(text), crc = crc32(data);
+      const nameBytes = enc.encode(name), raw = enc.encode(text), crc = crc32(raw), data = await deflate(raw);
       const local = new DataView(new ArrayBuffer(30));
       local.setUint32(0, 0x04034b50, true);
       local.setUint16(4, 20, true);
-      local.setUint16(8, 0, true);             // method: store
+      local.setUint16(8, 8, true);             // method: deflate
       local.setUint16(12, 0x21, true);         // date: 1980-01-01
       local.setUint32(14, crc, true);
       local.setUint32(18, data.length, true);
-      local.setUint32(22, data.length, true);
+      local.setUint32(22, raw.length, true);
       local.setUint16(26, nameBytes.length, true);
       parts.push(new Uint8Array(local.buffer), nameBytes, data);
 
@@ -44,10 +49,11 @@ const DOCX = (() => {
       cen.setUint32(0, 0x02014b50, true);
       cen.setUint16(4, 20, true);
       cen.setUint16(6, 20, true);
+      cen.setUint16(10, 8, true);
       cen.setUint16(14, 0x21, true);
       cen.setUint32(16, crc, true);
       cen.setUint32(20, data.length, true);
-      cen.setUint32(24, data.length, true);
+      cen.setUint32(24, raw.length, true);
       cen.setUint16(28, nameBytes.length, true);
       cen.setUint32(42, offset, true);
       central.push(new Uint8Array(cen.buffer), nameBytes);
@@ -99,7 +105,8 @@ ${heading("Heading2", "heading 2", 26, 240)}
 <w:style w:type="character" w:styleId="Hyperlink"><w:name w:val="Hyperlink"/><w:rPr><w:color w:val="1155CC"/><w:u w:val="single"/></w:rPr></w:style>
 </w:styles>`;
 
-  function build(blocks) {
+  // Async: compression runs on a stream.
+  async function build(blocks) {
     const links = [];
     const run = (r) => {
       const props = (r.bold ? "<w:b/>" : "") + (r.italic ? "<w:i/>" : "") + (r.color ? `<w:color w:val="${r.color}"/>` : "");
@@ -136,6 +143,7 @@ ${links.map((l, i) => `<Relationship Id="rLink${i + 1}" Type="http://schemas.ope
   }
 
   const MIME = "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+  const FORMAT = 2; // 1: stored, 2: deflated
 
   // data: URL, because service workers can't make blob: URLs for chrome.downloads.
   function dataUrl(bytes) {
@@ -144,5 +152,5 @@ ${links.map((l, i) => `<Relationship Id="rLink${i + 1}" Type="http://schemas.ope
     return `data:${MIME};base64,` + btoa(bin);
   }
 
-  return { build, dataUrl, MIME };
+  return { build, dataUrl, MIME, FORMAT };
 })();

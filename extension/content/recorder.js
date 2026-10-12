@@ -60,7 +60,7 @@
 
   function collectParticipants() {
     const add = (name) => {
-      name = (name || "").trim();
+      name = MT.dedupeName((name || "").trim());
       if (!name || name.length > 60 || /^\(?(you|me|unknown|speaker)\)?$/i.test(name) || MT.isIconName(name)) return;
       participants.add(MT.mapName(settings.nameMap, name));
     };

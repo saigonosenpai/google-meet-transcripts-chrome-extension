@@ -3,6 +3,17 @@
 Each version here becomes a release on GitHub, with the extension zip attached, as soon as
 it's pushed to `main` with the matching `version` in `extension/manifest.json`.
 
+## 2.2.2
+
+- **Word documents are about 4 times smaller.** They're now compressed, as Word itself
+  does; they open the same in Word, Google Docs and LibreOffice. Your existing documents
+  are re-saved compressed once, automatically, after the update.
+- **Fixed: doubled names in file names.** Meet can hold a hidden second copy of a name
+  in a video tile, which gave files like *Marketo Catchup - Isuru IlangarathneIsuru
+  Ilangarathne, …*. Only the visible name is read now, and names already recorded this
+  way are cleaned up; the same automatic re-save renames those files, and the icon-name
+  files from 2.2.1 too.
+
 ## 2.2.1
 
 - **Fixed: icon names in file names.** In some Meet calls, the names of the pin and

@@ -54,6 +54,14 @@ const date = `${today.getFullYear()}-${pad(today.getMonth() + 1)}-${pad(today.ge
 const dayDir = path.join(downloads, "Meeting Transcripts", date);
 const fileOf = (mid) => sw.evaluate((k) => chrome.storage.local.get(k).then((d) => d[k]), "f:" + mid);
 
+// Names read together with a hidden copy of themselves are collapsed; real names are left alone.
+const deduped = await sw.evaluate(() => [
+  "Isuru IlangarathneIsuru Ilangarathne", "Chathuranga BalasooriyaChathuranga Bala", "AnnAnn",
+  "McDonald", "Ann McAnn", "DeShawn De", "Mary-Jane O'Neil", "Lee Lee", "Ó SúilleabháinÓ Súil",
+].map(MT.dedupeName));
+assert.deepEqual(deduped, ["Isuru Ilangarathne", "Chathuranga Balasooriya", "Ann",
+  "McDonald", "Ann McAnn", "DeShawn De", "Mary-Jane O'Neil", "Lee Lee", "Ó Súilleabháin"]);
+
 // --- a scheduled call ("Weekly sync") ---------------------------------------------------------
 // No name configured: "You" in captions must become the Google account name, "Sam Lee".
 const page = await ctx.newPage();
@@ -76,7 +84,7 @@ const fileState = () => fileOf(meta.id);
 let file;
 for (let i = 0; i < 40 && !(file = await fileState()); i++) await page.waitForTimeout(250);
 assert.ok(file && !file.error, "saved after leaving: " + JSON.stringify(file));
-const expected = `${date} - Weekly sync - Alice, Bob, Carol, Sam Lee.docx`;
+const expected = `${date} - Weekly sync - Alice, Bob, Carol Diaz, Sam Lee.docx`;
 console.log("saved:", file.filename);
 assert.equal(path.basename(file.filename), expected);
 assert.equal(path.dirname(file.filename), dayDir, "grouped in a folder per day");
@@ -149,12 +157,12 @@ async function runCall(code) {
 }
 const call1 = await runCall("xtk-wiod-gkq");
 console.log("spontaneous:", call1.m.title, "->", path.basename(call1.f.filename));
-assert.equal(call1.m.title, "Call with Alice, Bob, Carol");
-assert.equal(call1.f.filename, path.join(dayDir, `${date} - Call with Alice, Bob, Carol.docx`));
+assert.equal(call1.m.title, "Call with Alice, Bob, Carol Diaz");
+assert.equal(call1.f.filename, path.join(dayDir, `${date} - Call with Alice, Bob, Carol Diaz.docx`));
 // Same people again the same day: a second file, not an overwrite.
 const call2 = await runCall("pqr-stuv-wxy");
 console.log("second call, same people:", path.basename(call2.f.filename));
-assert.equal(call2.f.filename, path.join(dayDir, `${date} - Call with Alice, Bob, Carol (2).docx`));
+assert.equal(call2.f.filename, path.join(dayDir, `${date} - Call with Alice, Bob, Carol Diaz (2).docx`));
 assert.equal(fs.readdirSync(dayDir).length, 3);
 
 // Recordings from before this version stored "Meet <code>" for untitled calls.
@@ -354,6 +362,8 @@ await close();
   assert.ok(fs.existsSync(newDoc), "document moved to Meeting Transcripts");
   assert.ok(!fs.existsSync(old.docx), "old document removed");
   assert.ok(fs.existsSync(newLib) && !fs.existsSync(old.lib), "library.json moved");
+  // Re-saved compressed: the first zip entry's method is deflate (8), not store (0).
+  assert.equal(fs.readFileSync(newDoc).readUInt16LE(8), 8, "re-saved document is compressed");
   console.log("upgrade: moved to", path.relative(run.downloads, newDoc));
   await run.close();
 }
