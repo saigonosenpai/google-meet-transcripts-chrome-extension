@@ -19,12 +19,19 @@ function setTone(tone) {
   $("status").dataset.tone = tone;
 }
 
+let copiedAt = 0; // when a report was last copied, to keep "Copied." on screen a moment
+
 function render() {
   const dot = $("dot"), state = $("state"), detail = $("detail");
   dot.className = "dot";
   setTone("idle");
   $("meetActions").hidden = !current || !current.inMeeting;
-  $("diagnose").hidden = !current || !current.inMeeting || current.paused || (current.captionsOn && current.count > 0);
+  // A report can be copied any time in a call; it's offered as the fix when nothing is recorded.
+  $("diagnose").hidden = !current || !current.inMeeting;
+  if (current && current.inMeeting && Date.now() - copiedAt > 4000) {
+    $("diagnose").textContent = current.paused || (current.captionsOn && current.count > 0)
+      ? "Copy a report for troubleshooting" : "Captions not being picked up? Copy a report";
+  }
   if (!current) {
     state.textContent = "Not in a call";
     detail.textContent = tab && CALL_PAGES.test(tab.url || "")
@@ -147,6 +154,7 @@ async function init() {
     try { report = await chrome.tabs.sendMessage(tab.id, { type: "diagnose" }); } catch {}
     await navigator.clipboard.writeText(JSON.stringify(report || { error: "the page didn't answer" }, null, 2));
     $("diagnose").textContent = "Copied. Paste it into a GitHub issue (it has no transcript text).";
+    copiedAt = Date.now();
   });
   for (const id of ["hideCaptions", "showIndicator"]) {
     $(id).addEventListener("change", (e) => MT.saveSettings({ [id]: e.target.checked }));
