@@ -346,14 +346,23 @@
         ` ${cs.display}/${cs.position}${cs.flex !== "0 1 auto" ? " flex " + cs.flex : ""}${cs.height !== "auto" ? " h " + cs.height : ""}` +
         `${el.classList.contains("mt-collapsed") ? " COLLAPSED" : ""}${el.querySelector("video") ? " +video" : ""} children ${el.children.length}`);
     }
-    // How the video area is sized: the first tiles' ancestors, with any inline size.
-    for (const v of [...document.querySelectorAll("video")].slice(0, 2)) {
-      lines.push("video:");
-      for (let el = v, i = 0; el && el !== document.body && i < 6; el = el.parentElement, i++) {
-        const r = el.getBoundingClientRect();
-        const inline = ["top", "left", "width", "height", "inset", "transform"].map((k) => el.style[k] && `${k}:${el.style[k]}`).filter(Boolean).join(" ");
-        lines.push(`  ${describe(el)} ${Math.round(r.width)}×${Math.round(r.height)} at ${Math.round(r.top)}${inline ? " {" + inline + "}" : ""}`);
-      }
+    // How the call's main area is sized, cameras on or off: the blocks of the call layout (the
+    // innermost window-sized container around the captions), two levels deep, with the
+    // positioning the page sets on them. The one that stops short of the controls is the stage.
+    const box = (el) => {
+      const r = el.getBoundingClientRect(), cs = getComputedStyle(el);
+      const inline = ["top", "bottom", "left", "height", "inset", "transform"].map((k) => el.style[k] && `${k}:${el.style[k]}`).filter(Boolean).join(" ");
+      return `${describe(el)} ${Math.round(r.width)}×${Math.round(r.height)} at ${Math.round(r.top)}–${Math.round(r.bottom)} ${cs.position}` +
+        `${cs.bottom !== "auto" && cs.position !== "static" ? " bottom " + cs.bottom : ""}${inline ? " {" + inline + "}" : ""}` +
+        `${el.contains(region) ? " ◀captions" : ""}${el.querySelector("video") ? " +video" : ""}`;
+    };
+    let call = region.parentElement || region;
+    while (call.parentElement && call !== document.body && call.getBoundingClientRect().height < window.innerHeight * 0.9) call = call.parentElement;
+    lines.push("call layout:", "  " + box(call));
+    const big = (el) => [...el.children].filter((c) => { const r = c.getBoundingClientRect(); return r.width * r.height > 20000 || c.contains(region); });
+    for (const c of big(call).slice(0, 12)) {
+      lines.push("    " + box(c));
+      for (const g of big(c).slice(0, 6)) lines.push("      " + box(g));
     }
     return lines.join("\n");
   }

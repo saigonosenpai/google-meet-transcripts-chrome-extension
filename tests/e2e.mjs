@@ -259,6 +259,7 @@ console.log("restored meetings:", titlesAfter.join(" | "));
   });
   console.log("caption layout report:\n" + report.captionLayout);
   assert.match(report.captionLayout, /COLLAPSED/);
+  assert.match(report.captionLayout, /call layout:[\s\S]*main#stage/);
   assert.ok(!/launch|Friday|thanks/i.test(JSON.stringify(report)), "no caption text in the report");
   // The in-call pill has a switch for it. The pill is in a closed shadow root, which only the
   // DevTools protocol reaches: find its "Show captions" button there and click it.
