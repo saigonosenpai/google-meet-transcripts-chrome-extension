@@ -246,6 +246,7 @@ console.log("restored meetings:", titlesAfter.join(" | "));
   // width if that comes first, centered, and never over the controls.
   const fits = (l, w, h, what) => {
     const t = l.tile, floor = h - 80 - 16, near = (a, b) => Math.abs(a - b) <= 2;
+    assert.ok(t.top >= -1, `${what}: tiles stay on screen ${JSON.stringify(t)}`);
     assert.ok(t.bottom <= floor + 1, `${what}: tiles stay above the controls ${JSON.stringify(t)}`);
     assert.ok(near(t.bottom, floor) || near(t.width, w - 32), `${what}: tiles fill the space ${JSON.stringify(t)}`);
     assert.ok(near(t.left - 16, w - 16 - t.right), `${what}: tiles centered ${JSON.stringify(t)}`);

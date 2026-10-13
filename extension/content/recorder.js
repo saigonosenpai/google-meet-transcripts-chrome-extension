@@ -392,11 +392,14 @@
     else {
       const st = stageEl.getBoundingClientRect();
       const margin = Math.min(parseFloat(getComputedStyle(stageEl).left) || 0, 24);
-      // The tiles: the union of what's drawn in the stage.
+      // The tiles: the stage's blocks that hold a video or a participant. Not layers covering the
+      // whole stage (Meet's stage holds some), which would make the tiles look full already.
       let l = Infinity, t = Infinity, r = -Infinity, b = -Infinity;
       for (const c of stageEl.children) {
         const cr = c.getBoundingClientRect();
         if (cr.width < 2 || cr.height < 2) continue;
+        if (cr.width >= st.width * 0.98 && cr.height >= st.height * 0.98) continue;
+        if (!c.querySelector("video, [data-participant-id]") && !c.matches("[data-participant-id]")) continue;
         l = Math.min(l, cr.left); t = Math.min(t, cr.top); r = Math.max(r, cr.right); b = Math.max(b, cr.bottom);
       }
       const availH = edge - margin - st.top, cw = r - l, ch = b - t;
