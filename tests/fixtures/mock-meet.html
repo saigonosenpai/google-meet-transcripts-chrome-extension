@@ -12,6 +12,8 @@
   #controls { height: 80px; }
 </style></head>
 <body>
+<!-- Meet's top bar shows participant avatars, earlier in the page than the stage. -->
+<div id="topbar" style="position:absolute;top:0;right:0;z-index:1"><div data-participant-id="p1"><img alt=""></div></div>
 <main id="stage"><video></video>
 <!-- Mimics Meet's caption DOM: one block per speaker turn, text revised in place. -->
 <!-- Account button from the "Ready to join?" screen; the extension reads your name from it. -->

@@ -344,13 +344,23 @@
   // page's inline value is never touched, so turning hiding off restores Meet's layout as is.
   let stage = null, stageBottom = "";
 
+  // The stage: the largest positioned container, with an inline bottom offset, around any video
+  // or participant tile. Every one is checked: the first on the page can be an avatar in the
+  // top bar rather than a tile on the stage.
   function findStage() {
-    const tile = document.querySelector("video, [data-participant-id]");
-    for (let el = tile && tile.parentElement; el && el !== document.body; el = el.parentElement) {
-      const pos = getComputedStyle(el).position;
-      if ((pos === "absolute" || pos === "fixed") && /px$/.test(el.style.bottom) && !el.contains(region)) return el;
+    let best = null, bestArea = 0;
+    const seen = new Set();
+    for (const tile of [...document.querySelectorAll("video, [data-participant-id]")].slice(0, 60)) {
+      for (let el = tile.parentElement; el && el !== document.body && !seen.has(el); el = el.parentElement) {
+        seen.add(el);
+        if (!/px$/.test(el.style.bottom) || el.contains(region)) continue;
+        const pos = getComputedStyle(el).position;
+        if (pos !== "absolute" && pos !== "fixed") continue;
+        const r = el.getBoundingClientRect();
+        if (r.width * r.height > bestArea) { best = el; bestArea = r.width * r.height; }
+      }
     }
-    return null;
+    return best;
   }
 
   function fitStage(hide) {
@@ -579,7 +589,10 @@
     const attrs = ["data-tid", "role", "aria-live", "jsname"].map((a) => el.getAttribute(a) && `[${a}=${el.getAttribute(a)}]`).filter(Boolean);
     const aria = el.getAttribute("aria-label");
     if (aria) attrs.push(`[aria-label=${aria.slice(0, 40)}${aria.length > 40 ? "…" : ""}]`);
-    const cls = typeof el.className === "string" && el.className.trim() ? "." + el.className.trim().split(/\s+/).slice(0, 4).join(".") : "";
+    // The page's first classes, plus ours (mt-…) wherever they are, to show what we changed.
+    const all = typeof el.className === "string" ? el.className.trim().split(/\s+/).filter(Boolean) : [];
+    const shown = [...all.filter((c) => !c.startsWith("mt-")).slice(0, 4), ...all.filter((c) => c.startsWith("mt-"))];
+    const cls = shown.length ? "." + shown.join(".") : "";
     return `${el.tagName.toLowerCase()}${el.id ? "#" + el.id : ""}${cls}${attrs.join("")} (${(el.textContent || "").length} chars)`;
   }
 
