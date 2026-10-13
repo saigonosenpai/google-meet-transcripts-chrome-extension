@@ -108,7 +108,11 @@ console.log("renamed:", path.basename(renamed.filename));
 assert.ok(path.basename(renamed.filename).includes("Weekly sync (Q4) - Alice"));
 assert.ok(fs.existsSync(renamed.filename), "new file exists");
 assert.ok(!fs.existsSync(file.filename), "old file removed");
-assert.deepEqual(fs.readdirSync(path.dirname(renamed.filename)), [path.basename(renamed.filename)]);
+// Renaming re-saves on its own and Save was clicked too: let Chrome finish writing before
+// listing the folder (an unfinished download shows as "Unconfirmed ….crdownload").
+const listing = () => fs.readdirSync(path.dirname(renamed.filename));
+for (let i = 0; i < 40 && listing().some((f) => f.endsWith(".crdownload")); i++) await v.waitForTimeout(250);
+assert.deepEqual(listing(), [path.basename(renamed.filename)]);
 await v.screenshot({ path: shots + "/viewer.png" });
 
 // --- delete is immediate and undoable (no blocking confirm dialog) ---------------------------------
