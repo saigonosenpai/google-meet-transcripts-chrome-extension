@@ -14,7 +14,7 @@
 <body>
 <!-- Meet's top bar shows participant avatars, earlier in the page than the stage. -->
 <div id="topbar" style="position:absolute;top:0;right:0;z-index:1"><div data-participant-id="p1"><img alt=""></div></div>
-<main id="stage"><video></video>
+<main id="stage" class="stg"><video></video>
 <!-- Mimics Meet's caption DOM: one block per speaker turn, text revised in place. -->
 <!-- Account button from the "Ready to join?" screen; the extension reads your name from it. -->
 <a aria-label="Google Account: Sam Lee  (sam@example.com)" href="#">S</a>
@@ -40,6 +40,8 @@ const layoutStage = () => {
   document.getElementById("stage").style.bottom = document.getElementById("bottom").offsetHeight + 16 + "px";
 };
 layoutStage();
+// Meet re-renders the stage, resetting its class list: classes added by others don't last.
+setInterval(() => { document.getElementById("stage").className = "stg"; }, 300);
 document.getElementById("cc").onclick = (e) => {
   e.target.setAttribute("aria-pressed", "true");
   e.target.setAttribute("aria-label", "Turn off captions (c)");

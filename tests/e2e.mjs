@@ -271,6 +271,7 @@ console.log("restored meetings:", titlesAfter.join(" | "));
   });
   console.log("caption layout report:\n" + report.captionLayout);
   assert.match(report.captionLayout, /COLLAPSED/);
+  assert.match(report.captionLayout, /stage fit: main#stage/);
   assert.match(report.captionLayout, /call layout:[\s\S]*main#stage/);
   assert.match(report.captionLayout, /stage path:\n  video [\s\S]*main#stage[^\n]*bottom/);
   assert.ok(!/launch|Friday|thanks/i.test(JSON.stringify(report)), "no caption text in the report");

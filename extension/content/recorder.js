@@ -338,11 +338,14 @@
   }
 
   // Meet positions its video stage itself, with an inline bottom offset that leaves room for
+  // Meet positions its video stage itself, with an inline bottom offset that leaves room for
   // the caption panel, and doesn't recalculate it when the panel collapses. While captions are
   // hidden, a stylesheet rule overrides that offset so the stage ends just above the controls
   // (where the collapsed panel now sits), with the stage's own side margin as the gap. The
   // page's inline value is never touched, so turning hiding off restores Meet's layout as is.
-  let stage = null, stageBottom = "";
+  // Meet re-renders the stage and resets its classes, so the rule names the stage by the page's
+  // own class (checked to match it alone), not by a class of ours.
+  let fitInfo = "";
 
   // The stage: the largest positioned container, with an inline bottom offset, around any video
   // or participant tile. Every one is checked: the first on the page can be an avatar in the
@@ -363,29 +366,44 @@
     return best;
   }
 
+  function selectorFor(el) {
+    const tag = el.tagName.toLowerCase();
+    for (const c of el.classList) {
+      if (c.startsWith("mt-")) continue;
+      const sel = `${tag}.${CSS.escape(c)}`;
+      if (document.querySelectorAll(sel).length === 1) return sel;
+    }
+    document.querySelectorAll("[data-mt-stage]").forEach((x) => { if (x !== el) delete x.dataset.mtStage; });
+    el.dataset.mtStage = "";
+    return "[data-mt-stage]";
+  }
+
   function fitStage(hide) {
     const edge = hide && collapsed.length ? collapsed[collapsed.length - 1].getBoundingClientRect().top : 0;
     const next = hide && edge > 0 ? findStage() : null;
-    let bottom = "";
-    if (next) {
+    let rule = "";
+    if (!hide) fitInfo = "off";
+    else if (!edge) fitInfo = "no collapsed caption panel";
+    else if (!next) fitInfo = "no stage found";
+    else {
       const margin = parseFloat(getComputedStyle(next).left) || 0;
       const target = Math.max(0, Math.round(window.innerHeight - edge + Math.min(margin, 24)));
       // Only ever give space back, never take it.
-      if (target < parseFloat(next.style.bottom)) bottom = target + "px";
+      if (target < parseFloat(next.style.bottom)) {
+        const sel = selectorFor(next);
+        rule = `${sel} { bottom: ${target}px !important; }`;
+        fitInfo = `${describe(next)} bottom ${next.style.bottom} → ${target}px via ${sel}`;
+      } else fitInfo = `${describe(next)} bottom ${next.style.bottom} already ≤ ${target}px`;
     }
-    const target = bottom ? next : null;
-    if (target === stage && bottom === stageBottom) return false;
-    if (stage && stage !== target) stage.classList.remove("mt-stage");
-    stage = target;
-    stageBottom = bottom;
     let css = document.getElementById("mt-stage-css");
+    if (!css && !rule) return false;
     if (!css) {
       css = document.createElement("style");
       css.id = "mt-stage-css";
       (document.head || document.documentElement).append(css);
     }
-    css.textContent = stage ? `.mt-stage { bottom: ${bottom} !important; }` : "";
-    if (stage) stage.classList.add("mt-stage");
+    if (css.textContent === rule) return false;
+    css.textContent = rule;
     return true;
   }
 
@@ -393,6 +411,7 @@
   function layoutReport() {
     if (!region) return null;
     const lines = [`window ${window.innerWidth}×${window.innerHeight}, hide ${settings.hideCaptions ? "on" : "off"}`];
+    lines.push("stage fit: " + (fitInfo || "not run"));
     for (let el = region, i = 0; el && el !== document.documentElement && i < 10; el = el.parentElement, i++) {
       const r = el.getBoundingClientRect(), cs = getComputedStyle(el);
       lines.push(`${"  ".repeat(i)}${describe(el)} ${Math.round(r.width)}×${Math.round(r.height)} at ${Math.round(r.top)}` +
@@ -653,6 +672,8 @@
     window.addEventListener("pagehide", save);
     // A new window size (resized, or moved to another screen) moves the controls: refit the
     // stage. Our own resize signal changes nothing here, so it doesn't loop.
+    // Meet re-renders its layout without touching the captions: re-check while hiding is on.
+    setInterval(() => { if (settings.hideCaptions && region) applyHide(); }, 1000);
     let resizeTimer = 0;
     window.addEventListener("resize", () => { clearTimeout(resizeTimer); resizeTimer = setTimeout(applyHide, 150); });
     document.addEventListener("visibilitychange", () => document.hidden && save());
