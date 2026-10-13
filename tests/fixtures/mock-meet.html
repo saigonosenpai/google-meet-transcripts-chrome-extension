@@ -1,12 +1,14 @@
 <!doctype html>
 <html><head><title>Meet</title>
 <style>
-  /* Laid out like Meet: the video stage takes what the caption strip and the controls leave. */
-  body { margin: 0; height: 100vh; display: flex; flex-direction: column; }
-  #stage { flex: 1; min-height: 0; }
+  /* Like Meet: the bottom bar holds the caption strip and the controls, and the video stage
+     is sized by script from what that bar leaves, recalculated only when the window resizes. */
+  body { margin: 0; height: 100vh; overflow: hidden; }
+  #stage { overflow: hidden; }
+  #bottom { position: absolute; left: 0; right: 0; bottom: 0; }
   #capbar { padding: 12px 0; }
   #capbar > div { min-height: 140px; }
-  #controls { height: 80px; flex: none; }
+  #controls { height: 80px; }
 </style></head>
 <body>
 <main id="stage"><video></video>
@@ -20,14 +22,22 @@
 <div data-participant-id="p3"><span class="notranslate">frame_person</span><div class="notranslate"><span>Carol Diaz</span><span style="display:none">Carol D</span></div></div>
 <div data-participant-id="p4"><div data-self-name="You" class="zWGUib notranslate">You</div></div>
 </main>
-<!-- The caption strip, between the stage and the controls; empty until captions are on. -->
-<div id="capbar" hidden><div></div></div>
-<footer id="controls"><button aria-label="Turn on captions (c)" aria-pressed="false" id="cc">CC</button></footer>
+<div id="bottom">
+  <!-- The caption strip, above the controls; empty until captions are on. -->
+  <div id="capbar" hidden><div></div></div>
+  <footer id="controls"><button aria-label="Turn on captions (c)" aria-pressed="false" id="cc">CC</button>
+    <button aria-label="Turn off microphone">Mic</button><button aria-label="Leave call">Leave</button></footer>
+</div>
 <script>
 // Calendar meetings show their title in the tab; spontaneous calls show only the code.
 const scheduled = location.pathname === "/abc-defg-hij";
 document.title = scheduled ? "Meet - Weekly sync" : "Meet - " + location.pathname.slice(1);
 let region = null;
+const layoutStage = () => {
+  document.getElementById("stage").style.height = innerHeight - document.getElementById("bottom").offsetHeight + "px";
+};
+addEventListener("resize", layoutStage);
+layoutStage();
 document.getElementById("cc").onclick = (e) => {
   e.target.setAttribute("aria-pressed", "true");
   e.target.setAttribute("aria-label", "Turn off captions (c)");
@@ -36,6 +46,7 @@ document.getElementById("cc").onclick = (e) => {
   region.setAttribute("aria-label", "Captions");
   document.getElementById("capbar").hidden = false;
   document.querySelector("#capbar > div").append(region);
+  layoutStage();
   run();
 };
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));

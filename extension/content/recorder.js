@@ -290,9 +290,10 @@
 
   // Hiding captions: the caption area is lifted out of the page (fixed, off-screen, invisible)
   // rather than display:none, so the page keeps rendering text we can read. The containers
-  // it leaves empty are collapsed, so the call's video gets the space back. A container is
-  // only collapsed while it holds no video, no participant tile and no more than a third
-  // of the window: never the call layout itself.
+  // it leaves empty are collapsed, and the page is told the window resized, so the call
+  // recalculates its video layout into the space (Meet sizes its tiles by script). A
+  // container is only collapsed while it holds no video, no participant tile, none of the
+  // call's controls and no more than a third of the window: never the call layout itself.
   const HIDE_CSS = `
     .mt-hidden-captions { position: fixed !important; left: -10000px !important; top: 0 !important;
       width: var(--mt-width, 40rem) !important; max-height: none !important; opacity: 0 !important; pointer-events: none !important; }
@@ -300,10 +301,14 @@
       padding-top: 0 !important; padding-bottom: 0 !important; margin-top: 0 !important; margin-bottom: 0 !important;
       border-width: 0 !important; overflow: hidden !important; }`;
   let collapsed = [];
+  // The call's own controls: a container holding any of these is part of the control bar.
+  const CONTROLS = ['microphone', 'camera', 'leave', 'hang up', 'end call', 'turn on captions', 'turn off captions',
+    'turn on live captions', 'turn off live captions'].map((l) => `button[aria-label*="${l}" i]`).join(", ");
 
   function collapsible(el) {
     if (!el || el === document.body || el === document.documentElement) return false;
     if (el.querySelector("video, [data-participant-id]")) return false;
+    if (el.querySelector(CONTROLS)) return false;
     const r = el.getBoundingClientRect();
     return r.height <= window.innerHeight / 3 || el.classList.contains("mt-collapsed");
   }
@@ -324,9 +329,11 @@
     }
     const chain = [];
     if (hide) for (let el = region.parentElement, i = 0; i < 6 && collapsible(el); el = el.parentElement, i++) chain.push(el);
+    const changed = chain.length !== collapsed.length || chain.some((el, i) => el !== collapsed[i]);
     for (const el of collapsed) if (!chain.includes(el)) el.classList.remove("mt-collapsed");
     for (const el of chain) el.classList.add("mt-collapsed");
     collapsed = chain;
+    if (changed) window.dispatchEvent(new Event("resize"));
   }
 
   // Where the caption area sits and what holds it: sizes and structure, never text.
@@ -338,6 +345,15 @@
       lines.push(`${"  ".repeat(i)}${describe(el)} ${Math.round(r.width)}×${Math.round(r.height)} at ${Math.round(r.top)}` +
         ` ${cs.display}/${cs.position}${cs.flex !== "0 1 auto" ? " flex " + cs.flex : ""}${cs.height !== "auto" ? " h " + cs.height : ""}` +
         `${el.classList.contains("mt-collapsed") ? " COLLAPSED" : ""}${el.querySelector("video") ? " +video" : ""} children ${el.children.length}`);
+    }
+    // How the video area is sized: the first tiles' ancestors, with any inline size.
+    for (const v of [...document.querySelectorAll("video")].slice(0, 2)) {
+      lines.push("video:");
+      for (let el = v, i = 0; el && el !== document.body && i < 6; el = el.parentElement, i++) {
+        const r = el.getBoundingClientRect();
+        const inline = ["top", "left", "width", "height", "inset", "transform"].map((k) => el.style[k] && `${k}:${el.style[k]}`).filter(Boolean).join(" ");
+        lines.push(`  ${describe(el)} ${Math.round(r.width)}×${Math.round(r.height)} at ${Math.round(r.top)}${inline ? " {" + inline + "}" : ""}`);
+      }
     }
     return lines.join("\n");
   }
@@ -440,6 +456,9 @@
       .dot { width: 8px; height: 8px; border-radius: 50%; background: #8e8e93; flex: none; }
       .rec .dot { background: #ff453a; animation: pulse 1.6s ease-in-out infinite; }
       .warn .dot { background: #ff9f0a; }
+      .cc { padding: 0 8px; border-radius: 999px; background: rgba(255, 255, 255, 0.14); font-size: 11px; }
+      .cc:hover { background: rgba(255, 255, 255, 0.22); }
+      .cc[hidden] { display: none; }
       .x { width: 20px; justify-content: center; border-radius: 50%; color: rgba(255, 255, 255, 0.6); font-size: 14px; }
       .x:hover { background: rgba(255, 255, 255, 0.14); color: #fff; }
       button:focus-visible { outline: 2px solid #0a84ff; outline-offset: 2px; border-radius: 999px; }
@@ -447,15 +466,18 @@
       @media (prefers-reduced-motion: reduce) { .rec .dot { animation: none; } .main:active { transform: none; } }
       @media (prefers-reduced-transparency: reduce) { .pill { background: #1c1c1e; backdrop-filter: none; } }
     </style><div class="pill" part="pill"><button class="main"><span class="dot"></span><span class="text"></span></button>` +
+      `<button class="cc"></button>` +
       `<button class="x" aria-label="Hide for this call" title="Hide for this call">×</button></div>`;
-    const [main, x] = root.querySelectorAll("button");
+    const [main, cc, x] = root.querySelectorAll("button");
+    // Captions shown or hidden on screen, right from the call (same as the popup's switch).
+    cc.addEventListener("click", () => MT.saveSettings({ hideCaptions: !settings.hideCaptions }));
     main.addEventListener("click", () => {
       if (settings.paused) MT.saveSettings({ paused: false });
       else if (region) MT.saveSettings({ paused: true });
       else tryEnableCaptions(true);
     });
     x.addEventListener("click", () => { pillHidden = true; host.remove(); pill = null; });
-    return { host, box: root.querySelector(".pill"), main, text: root.querySelector(".text") };
+    return { host, box: root.querySelector(".pill"), main, cc, text: root.querySelector(".text") };
   }
 
   function renderPill(s) {
@@ -474,6 +496,10 @@
     pill.box.className = "pill " + cls;
     pill.text.textContent = text;
     pill.main.title = tip;
+    pill.cc.hidden = !region || s.paused;
+    pill.cc.textContent = settings.hideCaptions ? "Show captions" : "Hide captions";
+    pill.cc.title = settings.hideCaptions ? "Show the captions on screen (still recording either way)"
+      : "Hide the captions on screen and keep recording";
   }
 
   // --- diagnostics ---------------------------------------------------------------------------

@@ -136,6 +136,8 @@ assert.ok((await p.textContent("#lastSaved")).includes("(Q4)"));
 await p.waitForFunction(() => document.getElementById("size").textContent !== "–");
 const stats = await p.evaluate(() => ["calls", "recorded", "size", "statsDetail"].map((id) => document.getElementById(id).textContent));
 console.log("popup stats:", stats.join(" | "));
+const manifestVersion = JSON.parse(fs.readFileSync(path.join(ext, "manifest.json"))).version;
+assert.equal(await p.textContent("#version"), "v" + manifestVersion, "popup shows the installed version");
 assert.equal(stats[0], "1");
 assert.match(stats[2], /^\d+(\.\d)? (KB|MB)$/);
 assert.match(stats[3], /^Meet 1 · 1 Word document/);
@@ -258,13 +260,29 @@ console.log("restored meetings:", titlesAfter.join(" | "));
   console.log("caption layout report:\n" + report.captionLayout);
   assert.match(report.captionLayout, /COLLAPSED/);
   assert.ok(!/launch|Friday|thanks/i.test(JSON.stringify(report)), "no caption text in the report");
-  // Switching it off brings the strip back.
-  await sw.evaluate(() => MT.saveSettings({ hideCaptions: false }));
-  await hp.waitForTimeout(500);
+  // The in-call pill has a switch for it. The pill is in a closed shadow root, which only the
+  // DevTools protocol reaches: find its "Show captions" button there and click it.
+  const cdp = await hp.context().newCDPSession(hp);
+  const pillButton = async () => {
+    const { root } = await cdp.send("DOM.getDocument", { depth: -1, pierce: true });
+    const cls = (n) => { const a = n.attributes || []; const i = a.indexOf("class"); return i >= 0 && i % 2 === 0 ? a[i + 1] : ""; };
+    const find = (n) => n.nodeName === "BUTTON" && cls(n) === "cc" ? n
+      : [...(n.children || []), ...(n.shadowRoots || [])].map(find).find(Boolean);
+    const { object } = await cdp.send("DOM.resolveNode", { nodeId: find(root).nodeId });
+    return object.objectId;
+  };
+  const pillCall = async (fn) => (await cdp.send("Runtime.callFunctionOn",
+    { objectId: await pillButton(), functionDeclaration: fn, returnByValue: true })).result.value;
+  assert.equal(await pillCall("function () { return this.textContent; }"), "Show captions");
+  // Clicking it brings the strip back.
+  await pillCall("function () { this.click(); }");
+  await hp.waitForTimeout(600);
+  assert.equal((await sw.evaluate(() => MT.getSettings())).hideCaptions, false, "pill switch turns hiding off");
+  assert.equal(await pillCall("function () { return this.textContent; }"), "Hide captions");
   const shown = await layout();
   assert.ok(shown.strip >= 140 && shown.captionsLeft >= 0 && shown.stage < 700 - 80 - 140, "strip back: " + JSON.stringify(shown));
-  await sw.evaluate(() => MT.saveSettings({ hideCaptions: true }));
-  await hp.waitForTimeout(500);
+  await pillCall("function () { this.click(); }");
+  await hp.waitForTimeout(600);
   // Now with a strip full of captions (taller than when the call began): still collapsed.
   assert.equal((await layout()).strip, 0, "collapsed again");
   await hp.close();

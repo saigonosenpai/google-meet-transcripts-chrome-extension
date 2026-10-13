@@ -129,6 +129,7 @@ async function renderStats() {
 }
 
 async function init() {
+  $("version").textContent = "v" + chrome.runtime.getManifest().version;
   const s = await MT.getSettings();
   $("hideCaptions").checked = s.hideCaptions;
   $("showIndicator").checked = s.showIndicator;
