@@ -337,14 +337,14 @@
     if (changed || refit) window.dispatchEvent(new Event("resize"));
   }
 
-  // Meet positions its video stage itself, with an inline bottom offset that leaves room for
-  // Meet positions its video stage itself, with an inline bottom offset that leaves room for
-  // the caption panel, and doesn't recalculate it when the panel collapses. While captions are
-  // hidden, a stylesheet rule overrides that offset so the stage ends just above the controls
-  // (where the collapsed panel now sits), with the stage's own side margin as the gap. The
-  // page's inline value is never touched, so turning hiding off restores Meet's layout as is.
-  // Meet re-renders the stage and resets its classes, so the rule names the stage by the page's
-  // own class (checked to match it alone), not by a class of ours.
+  // Meet positions its video stage and the tiles in it itself (inline offsets and sizes), with
+  // room for the caption panel, and recalculates neither when the panel collapses. So while
+  // captions are hidden, the tiles Meet drew are scaled up as one block (a CSS transform on the
+  // stage) to fill the space down to the controls, where the collapsed panel now sits, keeping
+  // the stage's side margin as the gap, never wider than the stage, centered. Meet's layout
+  // itself is untouched: turning hiding off removes the transform. Everything is measured on
+  // screen each time, so it fits any window size and any number of tiles. Meet re-renders the
+  // stage and resets its classes, so the rule names the stage by the page's own class.
   let fitInfo = "";
 
   // The stage: the largest positioned container, with an inline bottom offset, around any video
@@ -379,32 +379,45 @@
   }
 
   function fitStage(hide) {
+    let css = document.getElementById("mt-stage-css");
+    const before = css ? css.textContent : "";
+    // Measure Meet's own layout, without our transform (no paint happens in between).
+    if (css) css.textContent = "";
     const edge = hide && collapsed.length ? collapsed[collapsed.length - 1].getBoundingClientRect().top : 0;
-    const next = hide && edge > 0 ? findStage() : null;
+    const stageEl = hide && edge > 0 ? findStage() : null;
     let rule = "";
     if (!hide) fitInfo = "off";
     else if (!edge) fitInfo = "no collapsed caption panel";
-    else if (!next) fitInfo = "no stage found";
+    else if (!stageEl) fitInfo = "no stage found";
     else {
-      const margin = parseFloat(getComputedStyle(next).left) || 0;
-      const target = Math.max(0, Math.round(window.innerHeight - edge + Math.min(margin, 24)));
-      // Only ever give space back, never take it.
-      if (target < parseFloat(next.style.bottom)) {
-        const sel = selectorFor(next);
-        rule = `${sel} { bottom: ${target}px !important; }`;
-        fitInfo = `${describe(next)} bottom ${next.style.bottom} → ${target}px via ${sel}`;
-      } else fitInfo = `${describe(next)} bottom ${next.style.bottom} already ≤ ${target}px`;
+      const st = stageEl.getBoundingClientRect();
+      const margin = Math.min(parseFloat(getComputedStyle(stageEl).left) || 0, 24);
+      // The tiles: the union of what's drawn in the stage.
+      let l = Infinity, t = Infinity, r = -Infinity, b = -Infinity;
+      for (const c of stageEl.children) {
+        const cr = c.getBoundingClientRect();
+        if (cr.width < 2 || cr.height < 2) continue;
+        l = Math.min(l, cr.left); t = Math.min(t, cr.top); r = Math.max(r, cr.right); b = Math.max(b, cr.bottom);
+      }
+      const availH = edge - margin - st.top, cw = r - l, ch = b - t;
+      const scale = cw > 0 && ch > 0 ? Math.min(availH / ch, st.width / cw) : 0;
+      if (scale > 1.02) {
+        // transform-origin is the stage's top-left: a point p lands at d + scale·p.
+        const dx = (st.width - cw * scale) / 2 - scale * (l - st.left);
+        const dy = (availH - ch * scale) / 2 - scale * (t - st.top);
+        const sel = selectorFor(stageEl);
+        rule = `${sel} { transform: translate(${dx.toFixed(1)}px, ${dy.toFixed(1)}px) scale(${scale.toFixed(4)}) !important; transform-origin: 0 0 !important; }`;
+        fitInfo = `${describe(stageEl)} tiles ${Math.round(cw)}×${Math.round(ch)} scaled ×${scale.toFixed(2)} via ${sel}`;
+      } else fitInfo = `${describe(stageEl)} tiles ${Math.round(cw)}×${Math.round(ch)} already fill ${Math.round(st.width)}×${Math.round(availH)}`;
     }
-    let css = document.getElementById("mt-stage-css");
     if (!css && !rule) return false;
     if (!css) {
       css = document.createElement("style");
       css.id = "mt-stage-css";
       (document.head || document.documentElement).append(css);
     }
-    if (css.textContent === rule) return false;
     css.textContent = rule;
-    return true;
+    return rule !== before;
   }
 
   // Where the caption area sits and what holds it: sizes and structure, never text.

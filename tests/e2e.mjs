@@ -234,16 +234,27 @@ console.log("restored meetings:", titlesAfter.join(" | "));
   await hp.goto("https://meet.google.com/hid-ecap-tns");
   await hp.waitForFunction(() => window.done, null, { timeout: 30000 });
   await hp.waitForTimeout(800);
+  // The tile block as seen on screen (after any scaling), and where the controls start.
   const layout = () => hp.evaluate(() => ({
+    tile: (({ top, bottom, left, right, width, height }) => ({ top, bottom, left, right, width, height }))(document.getElementById("grid").getBoundingClientRect()),
     stage: document.getElementById("stage").getBoundingClientRect().height,
     strip: document.getElementById("capbar").getBoundingClientRect().height,
     captionsLeft: document.querySelector('[role="region"]').getBoundingClientRect().left,
     controls: document.getElementById("controls").getBoundingClientRect().height,
   }));
+  // Hidden captions: the tiles fill the space down to 16px above the controls, or the stage's
+  // width if that comes first, centered, and never over the controls.
+  const fits = (l, w, h, what) => {
+    const t = l.tile, floor = h - 80 - 16, near = (a, b) => Math.abs(a - b) <= 2;
+    assert.ok(t.bottom <= floor + 1, `${what}: tiles stay above the controls ${JSON.stringify(t)}`);
+    assert.ok(near(t.bottom, floor) || near(t.width, w - 32), `${what}: tiles fill the space ${JSON.stringify(t)}`);
+    assert.ok(near(t.left - 16, w - 16 - t.right), `${what}: tiles centered ${JSON.stringify(t)}`);
+  };
   const hidden = await layout();
   console.log("captions hidden:", JSON.stringify(hidden));
   assert.equal(hidden.strip, 0, "caption strip collapsed");
-  assert.equal(hidden.stage, 700 - 80 - 16, "video stage gets the space back, down to the controls");
+  fits(hidden, 1000, 700, "1000×700");
+  assert.ok(hidden.tile.height > 500, "tiles grew from 440px: " + hidden.tile.height);
   assert.equal(hidden.controls, 80, "controls untouched");
   assert.ok(hidden.captionsLeft < -5000, "captions moved off-screen");
   const recordedLines = () => sw.evaluate(async () => {
@@ -263,11 +274,11 @@ console.log("restored meetings:", titlesAfter.join(" | "));
     await hp.waitForTimeout(500);
     const l = await layout();
     assert.equal(l.strip, 0, `strip collapsed at ${w}×${h}`);
-    assert.equal(l.stage, h - 80 - 16, `stage down to the controls at ${w}×${h}`);
+    fits(l, w, h, `${w}×${h}`);
   }
   await hp.setViewportSize({ width: 1000, height: 700 });
   await hp.waitForTimeout(500);
-  console.log("hide captions: stage fits at 1366×768, 1920×1080, 2560×1440, 1280×720 and when resized");
+  console.log("hide captions: tiles fit at 1366×768, 1920×1080, 2560×1440, 1280×720 and when resized");
   // "Copy a report" includes the layout around the captions, never what was said.
   const report = await sw.evaluate(async () => {
     const [tab] = await chrome.tabs.query({ url: "https://meet.google.com/hid-ecap-tns" });
@@ -299,15 +310,15 @@ console.log("restored meetings:", titlesAfter.join(" | "));
   assert.equal((await sw.evaluate(() => MT.getSettings())).hideCaptions, false, "pill switch turns hiding off");
   assert.equal(await pillCall("function () { return this.textContent; }"), "Hide captions");
   const shown = await layout();
-  assert.ok(shown.strip >= 140 && shown.captionsLeft >= 0 && shown.stage <= 700 - 80 - 16 - 140, "strip back: " + JSON.stringify(shown));
+  assert.ok(shown.strip >= 140 && shown.captionsLeft >= 0 && Math.round(shown.tile.height) === 440, "strip back, tiles as Meet laid them out: " + JSON.stringify(shown));
   await pillCall("function () { this.click(); }");
   await hp.waitForTimeout(600);
   // Now with a strip full of captions (taller than when the call began): still collapsed.
   const again = await layout();
   assert.equal(again.strip, 0, "collapsed again");
-  assert.equal(again.stage, 700 - 80 - 16, "stage reclaimed again");
+  fits(again, 1000, 700, "hidden again");
   await hp.close();
-  console.log("hide captions: strip collapsed, stage", hidden.stage, "px, still recording; off again:", shown.strip, "px strip");
+  console.log("hide captions: tiles", Math.round(hidden.tile.width) + "×" + Math.round(hidden.tile.height), "(from 782×440), still recording; off again:", shown.strip, "px strip");
 }
 
 // --- Microsoft Teams ------------------------------------------------------------------------------

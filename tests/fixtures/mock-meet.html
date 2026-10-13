@@ -2,10 +2,13 @@
 <html><head><title>Meet</title>
 <style>
   /* Like Meet: the bottom bar holds the caption strip and the controls, and the video stage
-     is positioned absolutely, its bottom offset set inline by script when captions turn on
-     (room for the strip, the controls and a 16px margin) and not recalculated after. */
+     is positioned absolutely, its bottom offset set inline by script (room for the strip, the
+     controls and a 16px margin). Inside, the tile block is placed by script too, at 16:9, and
+     neither is recalculated when the space around them changes, only on a window resize. */
   body { margin: 0; height: 100vh; overflow: hidden; }
-  #stage { position: absolute; top: 0; left: 16px; right: 16px; overflow: hidden; }
+  #stage { position: absolute; top: 0; left: 16px; right: 16px; }
+  #grid { position: absolute; background: #333; }
+  #grid video { width: 100%; height: 100%; }
   #bottom { position: absolute; left: 0; right: 0; bottom: 0; }
   #capbar { padding: 12px 0; }
   #capbar > div { min-height: 140px; }
@@ -14,17 +17,17 @@
 <body>
 <!-- Meet's top bar shows participant avatars, earlier in the page than the stage. -->
 <div id="topbar" style="position:absolute;top:0;right:0;z-index:1"><div data-participant-id="p1"><img alt=""></div></div>
-<main id="stage" class="stg"><video></video>
 <!-- Mimics Meet's caption DOM: one block per speaker turn, text revised in place. -->
 <!-- Account button from the "Ready to join?" screen; the extension reads your name from it. -->
-<a aria-label="Google Account: Sam Lee  (sam@example.com)" href="#">S</a>
+<a aria-label="Google Account: Sam Lee  (sam@example.com)" href="#" style="position:absolute;left:-999px">S</a>
+<main id="stage" class="stg"><div id="grid"><video></video>
 <div data-participant-id="p1"><div class="zWGUib">Alice</div></div>
 <!-- Real tiles carry icon glyphs (pin, framing) marked notranslate, ahead of the name. -->
 <div data-participant-id="p2"><button><i class="google-symbols notranslate" aria-hidden="true">keep_outline</i></button><div class="zWGUib">Bob</div></div>
 <!-- ...and the name element can hold a second, hidden (sometimes truncated) copy of the name. -->
 <div data-participant-id="p3"><span class="notranslate">frame_person</span><div class="notranslate"><span>Carol Diaz</span><span style="display:none">Carol D</span></div></div>
 <div data-participant-id="p4"><div data-self-name="You" class="zWGUib notranslate">You</div></div>
-</main>
+</div></main>
 <div id="bottom">
   <!-- The caption strip, above the controls; empty until captions are on. -->
   <div id="capbar" hidden><div></div></div>
@@ -35,9 +38,14 @@
 // Calendar meetings show their title in the tab; spontaneous calls show only the code.
 const scheduled = location.pathname === "/abc-defg-hij";
 document.title = scheduled ? "Meet - Weekly sync" : "Meet - " + location.pathname.slice(1);
-let region = null;
+let region = null, captionsOn = false;
 const layoutStage = () => {
-  document.getElementById("stage").style.bottom = document.getElementById("bottom").offsetHeight + 16 + "px";
+  const stage = document.getElementById("stage"), grid = document.getElementById("grid");
+  // From its own state, like Meet: room for the controls, plus the caption panel when captions are on.
+  stage.style.bottom = 80 + (captionsOn ? 164 : 0) + 16 + "px";
+  const W = stage.offsetWidth, H = stage.offsetHeight;
+  const h = Math.min(H, W * 9 / 16), w = h * 16 / 9;
+  Object.assign(grid.style, { left: (W - w) / 2 + "px", top: (H - h) / 2 + "px", width: w + "px", height: h + "px" });
 };
 layoutStage();
 // Meet re-renders the stage, resetting its class list: classes added by others don't last.
@@ -50,6 +58,7 @@ document.getElementById("cc").onclick = (e) => {
   region.setAttribute("aria-label", "Captions");
   document.getElementById("capbar").hidden = false;
   document.querySelector("#capbar > div").append(region);
+  captionsOn = true;
   layoutStage();
   run();
 };
