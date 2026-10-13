@@ -364,6 +364,21 @@
       lines.push("    " + box(c));
       for (const g of big(c).slice(0, 6)) lines.push("      " + box(g));
     }
+    // From the main video (or a participant tile, cameras off) up to the call container: every
+    // level, since the stage often hangs off zero-size wrappers. Computed offsets included,
+    // so the level whose bottom stops short of the controls shows.
+    const tile = document.querySelector("video") || document.querySelector("[data-participant-id]");
+    if (tile) {
+      lines.push("stage path:");
+      for (let el = tile, i = 0; el && el !== call && i < 16; el = el.parentElement, i++) {
+        const cs = getComputedStyle(el);
+        const offs = ["top", "bottom", "height", "max-height", "transform", "inset"].map((k) => {
+          const v = cs.getPropertyValue(k);
+          return v && !/^(auto|none|0px|normal)$/.test(v) && !(k === "height") ? `${k} ${v}` : "";
+        }).filter(Boolean).join(", ");
+        lines.push(`  ${box(el)} ${cs.display}${offs ? " [" + offs + "]" : ""}`);
+      }
+    }
     return lines.join("\n");
   }
 
