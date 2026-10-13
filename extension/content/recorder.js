@@ -333,7 +333,50 @@
     for (const el of collapsed) if (!chain.includes(el)) el.classList.remove("mt-collapsed");
     for (const el of chain) el.classList.add("mt-collapsed");
     collapsed = chain;
-    if (changed) window.dispatchEvent(new Event("resize"));
+    const refit = fitStage(hide);
+    if (changed || refit) window.dispatchEvent(new Event("resize"));
+  }
+
+  // Meet positions its video stage itself, with an inline bottom offset that leaves room for
+  // the caption panel, and doesn't recalculate it when the panel collapses. While captions are
+  // hidden, a stylesheet rule overrides that offset so the stage ends just above the controls
+  // (where the collapsed panel now sits), with the stage's own side margin as the gap. The
+  // page's inline value is never touched, so turning hiding off restores Meet's layout as is.
+  let stage = null, stageBottom = "";
+
+  function findStage() {
+    const tile = document.querySelector("video, [data-participant-id]");
+    for (let el = tile && tile.parentElement; el && el !== document.body; el = el.parentElement) {
+      const pos = getComputedStyle(el).position;
+      if ((pos === "absolute" || pos === "fixed") && /px$/.test(el.style.bottom) && !el.contains(region)) return el;
+    }
+    return null;
+  }
+
+  function fitStage(hide) {
+    const edge = hide && collapsed.length ? collapsed[collapsed.length - 1].getBoundingClientRect().top : 0;
+    const next = hide && edge > 0 ? findStage() : null;
+    let bottom = "";
+    if (next) {
+      const margin = parseFloat(getComputedStyle(next).left) || 0;
+      const target = Math.max(0, Math.round(window.innerHeight - edge + Math.min(margin, 24)));
+      // Only ever give space back, never take it.
+      if (target < parseFloat(next.style.bottom)) bottom = target + "px";
+    }
+    const target = bottom ? next : null;
+    if (target === stage && bottom === stageBottom) return false;
+    if (stage && stage !== target) stage.classList.remove("mt-stage");
+    stage = target;
+    stageBottom = bottom;
+    let css = document.getElementById("mt-stage-css");
+    if (!css) {
+      css = document.createElement("style");
+      css.id = "mt-stage-css";
+      (document.head || document.documentElement).append(css);
+    }
+    css.textContent = stage ? `.mt-stage { bottom: ${bottom} !important; }` : "";
+    if (stage) stage.classList.add("mt-stage");
+    return true;
   }
 
   // Where the caption area sits and what holds it: sizes and structure, never text.
@@ -595,6 +638,10 @@
       return msg.type === "flush" || msg.type === "enableCaptions";
     });
     window.addEventListener("pagehide", save);
+    // A new window size (resized, or moved to another screen) moves the controls: refit the
+    // stage. Our own resize signal changes nothing here, so it doesn't loop.
+    let resizeTimer = 0;
+    window.addEventListener("resize", () => { clearTimeout(resizeTimer); resizeTimer = setTimeout(applyHide, 150); });
     document.addEventListener("visibilitychange", () => document.hidden && save());
     const loop = () => {
       tick();

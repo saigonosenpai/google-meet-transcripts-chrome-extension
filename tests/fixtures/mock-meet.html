@@ -2,9 +2,10 @@
 <html><head><title>Meet</title>
 <style>
   /* Like Meet: the bottom bar holds the caption strip and the controls, and the video stage
-     is sized by script from what that bar leaves, recalculated only when the window resizes. */
+     is positioned absolutely, its bottom offset set inline by script when captions turn on
+     (room for the strip, the controls and a 16px margin) and not recalculated after. */
   body { margin: 0; height: 100vh; overflow: hidden; }
-  #stage { overflow: hidden; }
+  #stage { position: absolute; top: 0; left: 16px; right: 16px; overflow: hidden; }
   #bottom { position: absolute; left: 0; right: 0; bottom: 0; }
   #capbar { padding: 12px 0; }
   #capbar > div { min-height: 140px; }
@@ -34,9 +35,8 @@ const scheduled = location.pathname === "/abc-defg-hij";
 document.title = scheduled ? "Meet - Weekly sync" : "Meet - " + location.pathname.slice(1);
 let region = null;
 const layoutStage = () => {
-  document.getElementById("stage").style.height = innerHeight - document.getElementById("bottom").offsetHeight + "px";
+  document.getElementById("stage").style.bottom = document.getElementById("bottom").offsetHeight + 16 + "px";
 };
-addEventListener("resize", layoutStage);
 layoutStage();
 document.getElementById("cc").onclick = (e) => {
   e.target.setAttribute("aria-pressed", "true");

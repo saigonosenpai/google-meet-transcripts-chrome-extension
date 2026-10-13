@@ -239,7 +239,7 @@ console.log("restored meetings:", titlesAfter.join(" | "));
   const hidden = await layout();
   console.log("captions hidden:", JSON.stringify(hidden));
   assert.equal(hidden.strip, 0, "caption strip collapsed");
-  assert.equal(hidden.stage, 700 - 80, "video stage gets the space back");
+  assert.equal(hidden.stage, 700 - 80 - 16, "video stage gets the space back, down to the controls");
   assert.equal(hidden.controls, 80, "controls untouched");
   assert.ok(hidden.captionsLeft < -5000, "captions moved off-screen");
   const recordedLines = () => sw.evaluate(async () => {
@@ -252,6 +252,18 @@ console.log("restored meetings:", titlesAfter.join(" | "));
     await hp.waitForTimeout(250);
   }
   assert.ok(lines.some((e) => e.text.includes("Great, thanks everyone.")), "still recording while hidden");
+  // Any screen size, and resizing mid-call (Meet re-sets its own offset when the window resizes).
+  await hp.evaluate(() => addEventListener("resize", layoutStage));
+  for (const [w, h] of [[1366, 768], [1920, 1080], [2560, 1440], [1280, 720]]) {
+    await hp.setViewportSize({ width: w, height: h });
+    await hp.waitForTimeout(500);
+    const l = await layout();
+    assert.equal(l.strip, 0, `strip collapsed at ${w}×${h}`);
+    assert.equal(l.stage, h - 80 - 16, `stage down to the controls at ${w}×${h}`);
+  }
+  await hp.setViewportSize({ width: 1000, height: 700 });
+  await hp.waitForTimeout(500);
+  console.log("hide captions: stage fits at 1366×768, 1920×1080, 2560×1440, 1280×720 and when resized");
   // "Copy a report" includes the layout around the captions, never what was said.
   const report = await sw.evaluate(async () => {
     const [tab] = await chrome.tabs.query({ url: "https://meet.google.com/hid-ecap-tns" });
@@ -260,7 +272,7 @@ console.log("restored meetings:", titlesAfter.join(" | "));
   console.log("caption layout report:\n" + report.captionLayout);
   assert.match(report.captionLayout, /COLLAPSED/);
   assert.match(report.captionLayout, /call layout:[\s\S]*main#stage/);
-  assert.match(report.captionLayout, /stage path:\n  video [\s\S]*main#stage/);
+  assert.match(report.captionLayout, /stage path:\n  video [\s\S]*main#stage[^\n]*bottom/);
   assert.ok(!/launch|Friday|thanks/i.test(JSON.stringify(report)), "no caption text in the report");
   // The in-call pill has a switch for it. The pill is in a closed shadow root, which only the
   // DevTools protocol reaches: find its "Show captions" button there and click it.
@@ -282,11 +294,13 @@ console.log("restored meetings:", titlesAfter.join(" | "));
   assert.equal((await sw.evaluate(() => MT.getSettings())).hideCaptions, false, "pill switch turns hiding off");
   assert.equal(await pillCall("function () { return this.textContent; }"), "Hide captions");
   const shown = await layout();
-  assert.ok(shown.strip >= 140 && shown.captionsLeft >= 0 && shown.stage < 700 - 80 - 140, "strip back: " + JSON.stringify(shown));
+  assert.ok(shown.strip >= 140 && shown.captionsLeft >= 0 && shown.stage <= 700 - 80 - 16 - 140, "strip back: " + JSON.stringify(shown));
   await pillCall("function () { this.click(); }");
   await hp.waitForTimeout(600);
   // Now with a strip full of captions (taller than when the call began): still collapsed.
-  assert.equal((await layout()).strip, 0, "collapsed again");
+  const again = await layout();
+  assert.equal(again.strip, 0, "collapsed again");
+  assert.equal(again.stage, 700 - 80 - 16, "stage reclaimed again");
   await hp.close();
   console.log("hide captions: strip collapsed, stage", hidden.stage, "px, still recording; off again:", shown.strip, "px strip");
 }
