@@ -1,5 +1,12 @@
 # Meeting Transcripts
 
+[![Download meeting-transcripts.zip](https://img.shields.io/badge/Download-meeting--transcripts.zip-2ea44f?style=for-the-badge&logo=googlechrome&logoColor=white)](https://github.com/saigonosenpai/meet-transcripts-chrome-extension/releases/latest/download/meeting-transcripts.zip)
+&nbsp; then follow the [install steps](#install) below.
+
+> **Use the Download button above, not GitHub's green "Code › Download ZIP".** That one is
+> the source code, and Chrome can't load its top folder. (If you already have it, select
+> the **`extension`** folder inside it in step 4.)
+
 **Turn every Google Meet, Microsoft Teams and Zoom call into a searchable transcript and a
 Word document, automatically.**
 
@@ -23,7 +30,8 @@ The extension isn't on the Chrome Web Store, so you add it to Chrome yourself. I
 about two minutes and works the same on Windows and Mac.
 
 **1. Download** [**meeting-transcripts.zip**](https://github.com/saigonosenpai/meet-transcripts-chrome-extension/releases/latest/download/meeting-transcripts.zip)
-(always the latest version).
+(always the latest version). Not the green **Code › Download ZIP** button: that's the
+source code, with the extension one folder deeper, in `extension`.
 
 **2. Unzip it into a permanent place.** Chrome runs the extension from this folder, so put
 it somewhere you won't clean up, and don't delete it later.
@@ -400,6 +408,8 @@ folder to the new computer's Downloads and use **Restore from folder…**.
 **"Manifest file is missing or unreadable" when loading it.** You selected a folder that
 doesn't directly contain `manifest.json`, usually the one above it. Select the
 `meeting-transcripts` folder that has `manifest.json` inside (see [Install](#install), step 4).
+If you downloaded the source code instead (a folder called
+`meet-transcripts-chrome-extension-main`), select the `extension` folder inside it.
 
 **The badge says `CC` and nothing is recorded.** Captions are off. Click the pill in the
 call, or turn captions on yourself: **c** or the CC button in Meet, **More › Language and
