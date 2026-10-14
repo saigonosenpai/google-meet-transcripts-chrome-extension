@@ -1,5 +1,5 @@
 # Publishes a GitHub release whenever main carries a manifest version that hasn't been released yet.
-# To ship an update: bump "version" in extension/manifest.json, add a "## <version>" section to CHANGELOG.md, push.
+# To ship an update: bump "version" in manifest.json, add a "## <version>" section to CHANGELOG.md, push.
 name: Release
 
 on:
@@ -25,7 +25,7 @@ jobs:
       - name: Check whether this version is already released
         id: version
         run: |
-          version=$(jq -r .version extension/manifest.json)
+          version=$(jq -r .version manifest.json)
           echo "version=$version" >> "$GITHUB_OUTPUT"
           tagged=$(git rev-list -n 1 "v$version" 2> /dev/null || true)
           if gh release view "v$version" > /dev/null 2>&1 && [ -n "$tagged" ] && git merge-base --is-ancestor "$tagged" HEAD; then
@@ -45,23 +45,25 @@ jobs:
         with:
           node-version: 22
 
-      - name: Run the end-to-end test
-        if: steps.version.outputs.new == 'true'
-        run: |
-          npm install --no-save playwright
-          npx playwright install --with-deps chromium
-          node tests/e2e.mjs extension "$RUNNER_TEMP"
-
       - name: Build the extension zip
         if: steps.version.outputs.new == 'true'
         run: |
+          # The extension lives at the top of the repo (so GitHub's own Download ZIP loads too);
+          # the release zip holds just the extension, plus the license and install notes.
           # The files sit at the top of the zip, so the folder that unzipping creates (on Windows
           # and Mac alike) is the one to pick in Load unpacked: no inner folder to miss.
           # A fixed name gives a stable link: releases/latest/download/meeting-transcripts.zip
           mkdir -p dist/pkg
-          cp -r extension/. dist/pkg/
+          cp -r manifest.json background.js content icons lib popup viewer dist/pkg/
           cp LICENSE README.md docs/INSTALL.txt dist/pkg/
-          cd dist/pkg && zip -qr ../meeting-transcripts.zip .
+          (cd dist/pkg && zip -qr ../meeting-transcripts.zip .)
+
+      - name: Run the end-to-end test on the zip's contents
+        if: steps.version.outputs.new == 'true'
+        run: |
+          npm install --no-save playwright
+          npx playwright install --with-deps chromium
+          node tests/e2e.mjs dist/pkg "$RUNNER_TEMP"
 
       - name: Write the release notes
         if: steps.version.outputs.new == 'true'
@@ -85,4 +87,4 @@ jobs:
         run: |
           version=${{ steps.version.outputs.version }}
           gh release create "v$version" "dist/meeting-transcripts.zip" \
-            --title "$(jq -r .name extension/manifest.json) $version" --notes-file notes.md --target "$GITHUB_SHA"
+            --title "$(jq -r .name manifest.json) $version" --notes-file notes.md --target "$GITHUB_SHA"
