@@ -386,8 +386,9 @@ click **Choose folder…** and pick `Downloads › Meeting Transcripts`. When Ch
 the extension see the folder, choose **Allow on every visit**.
 
 That's it. Calls from your other computers appear when you open the library or the popup,
-labelled **Recorded on** *that computer*. The library checks again every minute while it's
-open. If Chrome asks again for permission (it may, after a restart, without "Allow on every
+labelled **Recorded on** *that computer*, and again whenever you come back to the library.
+Nothing runs in the background for it, and files that haven't changed aren't read. If Chrome
+asks again for permission (it may, after a restart, without "Allow on every
 visit"), the button says **Allow sync…**: one click.
 
 How it works: each computer writes its whole library to
