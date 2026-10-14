@@ -3,6 +3,19 @@
 Each version here becomes a release on GitHub, with the extension zip attached, as soon as
 it's pushed to `main` with the matching `version` in `manifest.json`.
 
+## 2.5.0
+
+- **Export and Import instead of Sync.** Syncing through a folder needed a cloud storage app
+  on every computer. Now, to bring calls to another computer: **Export** in All
+  Transcripts saves your whole library as one file; **Import** it on the other computer.
+  Calls it doesn't have are added (labelled *Recorded on* that computer), a call edited
+  more recently on the other computer is updated, and nothing is ever removed, so
+  importing again is harmless. Nothing goes online.
+- **Import** is also how you bring your history back after a reinstall: pick `library.json`
+  (and Word documents, if you like) from `Downloads › Meeting Transcripts`.
+- A computer that had 2.4's sync on goes back to keeping `library.json`; a 2.4 sync file can
+  still be imported.
+
 ## 2.4.1
 
 - **One button, Sync, instead of two.** *Restore from folder…* and *Sync across devices…*
