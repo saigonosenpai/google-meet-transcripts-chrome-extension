@@ -89,6 +89,7 @@ If you use git, you can instead clone this repository and select the cloned fold
 - [Teams and Zoom](#teams-and-zoom)
 - [Where your files go and how they're named](#where-your-files-go-and-how-theyre-named)
 - [Your history is safe: library.json](#your-history-is-safe-libraryjson)
+- [Sync across devices](#sync-across-devices)
 - [Privacy](#privacy)
 - [FAQ](#faq)
 - [Troubleshooting](#troubleshooting)
@@ -347,6 +348,55 @@ which is merged in and removed when you do restore. Nothing is overwritten.
 
 **Don't delete or move `library.json`.** The `.docx` files are a backup of the transcripts,
 but only `library.json` holds your settings and edits.
+
+## Sync across devices
+
+Use the extension on more than one computer, and every computer's library shows the calls
+from all of them, with their transcripts, the names you gave meetings and speakers, and
+deletions too. Your Word documents end up in the same shared folder.
+
+The extension still never connects to anything. Your own cloud app (Google Drive, OneDrive,
+Dropbox or iCloud Drive) moves the files between your computers; the extension only reads
+and writes them in your Downloads folder, as it always does.
+
+**1. Make `Downloads › Meeting Transcripts` a synced folder, on every computer.** Chrome only
+saves inside its download folder, so that's where the shared folder has to be. Either:
+
+- **Move Chrome's download folder into your cloud folder** (simplest, any app). In Chrome:
+  **Settings › Downloads › Location › Change**, and pick a folder inside your cloud drive,
+  for example `OneDrive\Downloads`, `Dropbox/Downloads`, `iCloud Drive/Downloads` or, with
+  Google Drive for desktop, `My Drive/Downloads`. Everything you download then lands there,
+  not just transcripts. Do the same on each computer. Move your existing
+  `Meeting Transcripts` folder along, so its history comes with it.
+- **Or link only the `Meeting Transcripts` folder into your cloud folder.** Move
+  `Downloads\Meeting Transcripts` into your cloud folder, then link it back:
+  - Windows (Command Prompt, OneDrive or Dropbox):
+    `mklink /J "%USERPROFILE%\Downloads\Meeting Transcripts" "%USERPROFILE%\OneDrive\Meeting Transcripts"`
+  - Mac (Terminal, iCloud Drive):
+    `ln -s ~/Library/Mobile\ Documents/com~apple~CloudDocs/Meeting\ Transcripts ~/Downloads/Meeting\ Transcripts`
+
+  With Google Drive for desktop, use the first way: its drive doesn't take links.
+
+Google Drive's **Back up folders from your computer** (My Computer › Add folder) won't do:
+it keeps a separate copy per computer instead of one shared folder.
+
+**2. Turn it on, on every computer.** Open **All Transcripts**, click **Sync across
+devices…** at the bottom left, give this computer a name (it's shown on calls it recorded),
+click **Choose folder…** and pick `Downloads › Meeting Transcripts`. When Chrome asks to let
+the extension see the folder, choose **Allow on every visit**.
+
+That's it. Calls from your other computers appear when you open the library or the popup,
+labelled **Recorded on** *that computer*. The library checks again every minute while it's
+open. If Chrome asks again for permission (it may, after a restart, without "Allow on every
+visit"), the button says **Allow sync…**: one click.
+
+How it works: each computer writes its whole library to
+`Meeting Transcripts/devices/<computer id>.json`, a few seconds after anything changes, and
+never touches the other computers' files, so they can't overwrite each other. Each one reads
+the others and keeps the newest version of each call. A call you delete is marked as deleted
+in your computer's file, so it goes away everywhere; **Undo** brings it back everywhere.
+With sync on, these files replace `library.json`, and **Restore from folder…** reads them
+too. Settings (your name, switches) stay per computer.
 
 ## Privacy
 

@@ -3,6 +3,16 @@
 Each version here becomes a release on GitHub, with the extension zip attached, as soon as
 it's pushed to `main` with the matching `version` in `manifest.json`.
 
+## 2.4.0
+
+- **Sync across devices.** Use the extension on several computers and each one's library
+  shows the calls from all of them: transcripts, renamed meetings and speakers, and
+  deletions. Your cloud app (Google Drive, OneDrive, Dropbox or iCloud Drive) moves the
+  files; the extension still never connects to anything. Set up in **All Transcripts ›
+  Sync across devices…**; the README has the steps for each cloud app. Calls from another
+  computer are labelled *Recorded on* that computer.
+- **Restore from folder…** also reads the synced computers' files.
+
 ## 2.2.3
 
 - **Simpler to install.** The download is now always called `meeting-transcripts.zip`,

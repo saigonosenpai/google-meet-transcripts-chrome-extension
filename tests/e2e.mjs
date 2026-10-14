@@ -385,4 +385,105 @@ await close();
   await run.close();
 }
 
+// --- sync across devices ---------------------------------------------------------------------
+// The synced folder is stood in for by the browser's private file system (OPFS): the same
+// directory-handle API the real, picked folder uses, minus the picker no test can click.
+{
+  const run = await launch();
+  const v = await run.ctx.newPage();
+  await v.goto(`chrome-extension://${id}/viewer/viewer.html`);
+  const T0 = Date.now() - 3 * 3600_000;
+  const meeting = (id, title, at) => ({ id, code: "abc-defg-hij", eventTitle: title, startedAt: at, endedAt: at + 600_000, speakers: ["Ann"] });
+  // Here: L (recorded here), Y (to be deleted elsewhere), Z (renamed elsewhere, later).
+  await v.evaluate(async ([L, Y, Z]) => {
+    for (const m of [L, Y, Z]) await MT.saveMeeting(m, [{ speaker: "Ann", text: "Hello " + m.id, ts: m.startedAt }]);
+  }, [meeting("L-1", "Local call", T0), meeting("Y-1", "Deleted elsewhere", T0 + 60_000), meeting("Z-1", "Old title", T0 + 120_000)]);
+  const me = await v.evaluate(() => MT.getDevice());
+  assert.match(me.id, /^[0-9a-f]{8}$/);
+
+  // Turning sync on: this device writes its own file into the folder, devices/<id>.json.
+  await v.evaluate(() => chrome.storage.local.set({ sync: { on: true } }));
+  const ownFile = path.join(run.downloads, "Meeting Transcripts", "devices", me.id + ".json");
+  for (let i = 0; i < 40 && !fs.existsSync(ownFile); i++) await v.waitForTimeout(250);
+  const own = JSON.parse(fs.readFileSync(ownFile, "utf8"));
+  assert.equal(own.device.id, me.id);
+  assert.deepEqual(Object.keys(own.meetings).sort(), ["L-1", "Y-1", "Z-1"]);
+
+  // Another computer's file, as its cloud app would bring it in.
+  const now = Date.now();
+  const other = {
+    app: "meet-transcripts", kind: "library", version: 1, savedAt: now, settings: {}, files: { "X-1": { downloadId: 7 } },
+    device: { id: "0ffice00", name: "Office PC" },
+    meetings: {
+      "X-1": { ...meeting("X-1", "Call on the office PC", T0 + 300_000), updatedAt: now - 1000 },
+      "L-1": { ...meeting("L-1", "Stale copy of the local call", T0), updatedAt: T0 + 1 },
+      "Z-1": { ...meeting("Z-1", "New title from the office", T0 + 120_000), renamed: true, title: "New title from the office", updatedAt: now },
+    },
+    transcripts: { "X-1": [{ speaker: "Bo", text: "From the office.", ts: T0 + 300_000 }],
+      "L-1": [{ speaker: "Ann", text: "stale", ts: T0 }], "Z-1": [{ speaker: "Ann", text: "Renamed there.", ts: T0 + 120_000 }] },
+    deleted: { "Y-1": now },
+  };
+  const merged = await v.evaluate(async ([other, myId]) => {
+    const root = await navigator.storage.getDirectory();
+    const dir = await root.getDirectoryHandle("synced", { create: true });
+    const devices = await dir.getDirectoryHandle("devices", { create: true });
+    const put = async (name, text) => {
+      const w = await (await devices.getFileHandle(name, { create: true })).createWritable();
+      await w.write(text);
+      await w.close();
+    };
+    await put("0ffice00.json", JSON.stringify(other));
+    // This device's own file is skipped, whatever it holds.
+    await put(myId + ".json", JSON.stringify({ ...other, device: { id: myId, name: "me" }, meetings: {}, deleted: { "L-1": Date.now() } }));
+    await put("notes.txt", "not a library");
+    await SYNC.setFolder(dir);
+    const first = await SYNC.syncNow();
+    const second = await SYNC.syncNow();
+    const all = await chrome.storage.local.get(null);
+    return { first, second, meetings: all.meetings, x: all["t:X-1"], z: all["t:Z-1"], fx: all["f:X-1"], sync: all.sync };
+  }, [other, me.id]);
+  console.log("sync:", JSON.stringify(merged.first));
+  assert.deepEqual([merged.first.added, merged.first.updated, merged.first.removed], [1, 1, 1]);
+  assert.deepEqual(merged.first.devices, ["Office PC"]);
+  assert.deepEqual([merged.second.added, merged.second.updated, merged.second.removed], [0, 0, 0], "syncing again changes nothing");
+  assert.deepEqual(Object.keys(merged.meetings).sort(), ["L-1", "X-1", "Z-1"], "Y deleted on the other device");
+  assert.equal(merged.meetings["X-1"].syncedFrom, "Office PC");
+  assert.equal(merged.x[0].text, "From the office.");
+  assert.equal(merged.fx, undefined, "the other device's saved-file record isn't taken");
+  assert.equal(merged.meetings["L-1"].eventTitle, "Local call", "an older copy doesn't win");
+  assert.equal(merged.meetings["L-1"].syncedFrom, undefined);
+  assert.equal(await v.evaluate((m) => MT.title(m), merged.meetings["Z-1"]), "New title from the office", "the newer copy wins");
+  assert.equal(merged.z[0].text, "Renamed there.");
+  assert.deepEqual(merged.sync.devices, ["Office PC"]);
+
+  // The library shows where a call came from, and how sync stands.
+  await v.reload();
+  await v.waitForFunction(() => /Synced with Office PC/.test(document.getElementById("syncLabel").textContent));
+  await v.goto(`chrome-extension://${id}/viewer/viewer.html#X-1`);
+  await v.waitForFunction(() => document.getElementById("file").textContent.includes("Recorded on Office PC"));
+
+  // A deletion here goes out in this device's file, for the others.
+  await v.evaluate(() => MT.deleteMeeting("X-1"));
+  let out = null;
+  for (let i = 0; i < 40 && !(out && out.deleted && out.deleted["X-1"]); i++) {
+    await v.waitForTimeout(250);
+    try { out = JSON.parse(fs.readFileSync(ownFile, "utf8")); } catch {}
+  }
+  assert.ok(out.deleted["X-1"], "deletion written for the other devices");
+  assert.ok(!out.meetings["X-1"]);
+
+  // Choosing a folder this device doesn't save into is refused, and sync stays off.
+  const wrong = await v.evaluate(async () => {
+    await SYNC.turnOff();
+    const dir = await (await navigator.storage.getDirectory()).getDirectoryHandle("elsewhere", { create: true });
+    const r = await SYNC.turnOn(dir);
+    return { r, on: (await SYNC.state()).on };
+  });
+  assert.equal(wrong.r.ok, false);
+  assert.match(wrong.r.savesTo, /Meeting Transcripts$/);
+  assert.equal(wrong.on, false);
+  console.log("sync across devices: merged a call, a newer rename and a deletion; own file skipped; wrong folder refused");
+  await run.close();
+}
+
 console.log("ALL CHECKS PASSED");
