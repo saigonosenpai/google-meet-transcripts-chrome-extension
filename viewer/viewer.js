@@ -362,24 +362,23 @@ function bindActions() {
     });
   });
 
-  // Rebuild meetings from saved .docx files (pick the "Meeting Transcripts" folder, or files).
-  $("importBtn").addEventListener("click", () => { $("importBtn").classList.remove("pulse"); $("importInput").click(); });
+  // Browsers without folder access (Brave turns it off): a one-time restore from the folder.
   $("importInput").addEventListener("change", async (e) => {
     const picked = [...e.target.files];
     e.target.value = "";
-    const btn = $("importBtn");
+    const btn = $("syncBtn");
     btn.disabled = true;
-    const result = await restoreFrom(picked, (text) => (btn.lastChild.textContent = ` ${text}`));
+    const result = await restoreFrom(picked, (text) => ($("syncLabel").textContent = text));
     btn.disabled = false;
-    btn.lastChild.textContent = " Restore from folder…";
     libIndex = null;
     await loadLibrary();
+    renderSync();
     toast(result);
   });
 
   $("startFresh").addEventListener("click", async () => {
     await chrome.storage.local.set({ libraryReady: true });
-    $("importBtn").classList.remove("pulse");
+    $("syncBtn").classList.remove("pulse");
     $("welcomeChoice").hidden = true;
     toast("Starting a new library");
   });
@@ -428,8 +427,18 @@ async function restoreFrom(picked, progress) {
     const parsed = DOCX_IMPORT.parseLibrary(await f.text());
     if (parsed) libs.push(parsed);
   }
+  const me = await MT.getDevice();
   for (const lib of libs) {
     progress("Restoring library…");
+    if (lib.device) {
+      // Another computer's sync file: merged as sync does (newer copy wins, deletions apply).
+      if (lib.device.id === me.id) continue;
+      const r = await MT.mergeLibrary(lib, lib.device.name);
+      added += r.added + r.updated;
+      already += Math.max(0, lib.meetings.length - r.added - r.updated);
+      meetings = await MT.listMeetings();
+      continue;
+    }
     if (Object.keys(lib.settings).length) { await MT.saveSettings(lib.settings); settingsRestored = true; }
     const store = {};
     const { meetings: stored = {} } = await chrome.storage.local.get("meetings");
@@ -444,7 +453,11 @@ async function restoreFrom(picked, progress) {
     meetings = await MT.listMeetings();
   }
 
+  // Word files of meetings already here (by their file name) aren't even opened.
+  const known = new Set(meetings.map((m) => MT.docName(m).toLowerCase()));
   const docs = picked.filter((f) => /\.docx$/i.test(f.name) && !f.name.startsWith("~$"));
+  already += docs.filter((f) => known.has(f.name.replace(/( \(\d+\))?\.docx$/i, "").toLowerCase())).length;
+  docs.splice(0, docs.length, ...docs.filter((f) => !known.has(f.name.replace(/( \(\d+\))?\.docx$/i, "").toLowerCase())));
   for (const [i, file] of docs.entries()) {
     progress(`Reading ${i + 1} of ${docs.length}…`);
     try {
@@ -472,20 +485,21 @@ async function syncAllowed(folder) {
 // The sidebar button says how sync stands: off, on (with whom, when), or waiting for permission.
 async function renderSync() {
   const sync = await SYNC.state();
-  let label = "Sync across devices…", attention = false;
+  let label = "Sync", attention = false;
   if (sync.on) {
     if (!(await syncAllowed(await SYNC.getFolder()))) {
       label = "Allow sync…";
       attention = true;
     } else {
       const n = (sync.devices || []).length;
-      label = n === 1 ? `Synced with ${sync.devices[0]}` : n ? `Synced with ${n} devices` : "Sync on · no other devices yet";
+      label = n === 1 ? `Synced with ${sync.devices[0]}` : n ? `Synced with ${n} devices` : "Sync on";
       if (sync.lastSync) label += " · " + savedWhen(sync.lastSync);
     }
   }
   $("syncLabel").textContent = label;
   $("syncBtn").classList.toggle("attention", attention);
-  $("syncBtn").title = attention ? "Chrome needs your OK to read the synced folder again" : "Keep this library in step with your other computers";
+  $("syncBtn").title = attention ? "Chrome needs your OK to read your Meeting Transcripts folder again"
+    : "Connect your Meeting Transcripts folder: brings back the history saved there and keeps this library in step with your other computers";
 }
 
 let syncing = false;
@@ -519,7 +533,7 @@ async function renderSyncDialog() {
     const devices = sync.devices || [];
     $("syncStatus").textContent = (devices.length
       ? `Synced with ${devices.join(", ")}.`
-      : "On. No other computer has synced yet: set it up there too, with the same folder.") +
+      : "Connected. No other computer uses this folder yet; to sync, connect it there too.") +
       (sync.lastSync ? ` Last checked ${savedWhen(sync.lastSync)}.` : "");
   }
 }
@@ -528,6 +542,8 @@ function bindSync() {
   const dialog = $("syncDialog"), error = $("syncError");
   const fail = (msg) => { error.textContent = msg; error.hidden = !msg; };
   $("syncBtn").addEventListener("click", async () => {
+    $("syncBtn").classList.remove("pulse");
+    if (!window.showDirectoryPicker) return $("importInput").click(); // no folder access in this browser
     const sync = await SYNC.state();
     // Waiting for permission: this click is the user gesture Chrome needs to ask.
     if (sync.on && !(await syncAllowed(await SYNC.getFolder())) && (await SYNC.getFolder())) {
@@ -559,7 +575,14 @@ function bindSync() {
           (r.savesTo ? `: pick ${r.savesTo}` : ": pick Downloads › Meeting Transcripts") + ".");
       }
       dialog.close();
-      toast(r.devices.length ? `Sync on: ${r.added} calls from ${r.devices.join(", ")}` : "Sync on. Now set it up on your other computer.");
+      // Bring back everything already in the folder: library.json, the other computers' files,
+      // Word documents from before there was a library.json. Then keep syncing.
+      const result = await restoreFrom(await SYNC.collectFiles(folder), (text) => ($("syncLabel").textContent = text));
+      await chrome.storage.local.set({ libraryReady: true });
+      libIndex = null;
+      await loadLibrary();
+      await runSync(false);
+      toast(/^Restored 0 meetings$/.test(result) || /^No library/.test(result) ? "Sync on" : result);
     } finally {
       $("syncPick").disabled = false;
       renderSync();
@@ -573,7 +596,7 @@ function bindSync() {
   $("syncOffBtn").addEventListener("click", async () => {
     await SYNC.turnOff();
     dialog.close();
-    toast("Sync off. Calls synced so far stay in this library.");
+    toast("Sync off. Calls you have stay in this library.");
     renderSync();
   });
   // Sync when the page opens and when you come back to it (at most every 30 s): you use one
@@ -594,7 +617,7 @@ async function route() {
     meetings = await MT.listMeetings();
     const { libraryReady } = await chrome.storage.local.get("libraryReady");
     const isFresh = !meetings.length && !libraryReady;
-    $("importBtn").classList.toggle("pulse", isFresh);
+    $("syncBtn").classList.toggle("pulse", isFresh);
     $("welcomeChoice").hidden = !isFresh;
     renderList();
     return openMeeting(null);

@@ -273,7 +273,7 @@ mark { background: var(--hit); color: inherit; border-radius: 0.1875rem; padding
 .sidebar-foot .btn { width: 100%; justify-content: center; }
 .empty-state b { color: var(--label); font-weight: 600; }
 .empty-state .path { white-space: nowrap; }
-#importBtn.pulse { box-shadow: 0 0 0 3px var(--accent-soft); }
+#syncBtn.pulse { box-shadow: 0 0 0 3px var(--accent-soft); color: var(--accent); }
 
 /* Sync across devices: the sidebar button shows the state; the dialog sets it up. */
 .sidebar-foot { display: grid; grid-template-columns: minmax(0, 1fr); gap: 0.375rem; }

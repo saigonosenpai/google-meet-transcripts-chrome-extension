@@ -3,6 +3,18 @@
 Each version here becomes a release on GitHub, with the extension zip attached, as soon as
 it's pushed to `main` with the matching `version` in `manifest.json`.
 
+## 2.4.1
+
+- **One button, Sync, instead of two.** *Restore from folder…* and *Sync across devices…*
+  are now one: **Sync** in All Transcripts connects your `Meeting Transcripts` folder. It
+  brings back everything already in it (`library.json`, your other computers' sync files,
+  and Word documents of calls it doesn't have) and then keeps the library in step with
+  your other computers.
+- **Fixed: a newly connected computer showed nothing** while your other computer hadn't
+  connected yet. Connecting now also reads that computer's `library.json`.
+- Browsers that don't let extensions keep a folder (Brave turns it off) get a one-time
+  restore from the folder instead.
+
 ## 2.4.0
 
 - **Sync across devices.** Use the extension on several computers and each one's library
