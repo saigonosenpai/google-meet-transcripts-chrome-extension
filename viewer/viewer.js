@@ -576,9 +576,14 @@ function bindSync() {
     toast("Sync off. Calls synced so far stay in this library.");
     renderSync();
   });
-  // Sync when the page opens, when it's shown again, and every minute while it's open.
-  window.addEventListener("focus", () => runSync(false));
-  setInterval(() => { if (!document.hidden) runSync(false); }, 60_000);
+  // Sync when the page opens and when you come back to it (at most every 30 s): you use one
+  // computer at a time, so nothing needs to poll in the background. Unchanged files aren't read.
+  let lastFocusSync = 0;
+  window.addEventListener("focus", () => {
+    if (Date.now() - lastFocusSync < 30_000) return;
+    lastFocusSync = Date.now();
+    runSync(false);
+  });
 }
 
 // "#<meeting id>" opens a meeting; "#welcome" (after a fresh install) points at Restore.

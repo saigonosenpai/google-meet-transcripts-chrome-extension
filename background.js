@@ -51,8 +51,14 @@ const norm = (p) => p.replace(/\\/g, "/");
 
 // "Meeting Transcripts/2026-10-11/<name>.docx", adding " (2)", " (3)"… if another meeting
 // (say, a second call with the same people that day) already has that name.
+// The saved-file records only (f:<id>), without loading every transcript.
+async function fileRecords() {
+  const { meetings = {} } = await chrome.storage.local.get("meetings");
+  return chrome.storage.local.get(Object.keys(meetings).map((id) => "f:" + id));
+}
+
 async function uniquePath(id, day, base) {
-  const all = await chrome.storage.local.get(null);
+  const all = await fileRecords();
   const taken = Object.entries(all)
     .filter(([k, f]) => k.startsWith("f:") && k !== "f:" + id && f && f.filename)
     .map(([, f]) => norm(f.filename).toLowerCase());
@@ -223,9 +229,26 @@ chrome.storage.onChanged.addListener((changes, area) => {
     const before = changes.settings.oldValue || {}, after = changes.settings.newValue || {};
     if (!BACKED_UP.some((k) => JSON.stringify(before[k]) !== JSON.stringify(after[k]))) return; // only "paused" moved
   }
-  clearTimeout(libraryTimer);
-  libraryTimer = setTimeout(writeLibraryFile, 3000); // once things settle, not on every caption
+  // A transcript updated in place means a call is being recorded.
+  scheduleLibraryWrite(Object.entries(changes).some(([k, c]) => k.startsWith("t:") && c.oldValue && c.newValue));
 });
+
+// Writing the library reads all of it and builds the file in memory. While a call is being
+// recorded (its captions change all the time) it's written at most every 30 s; other changes
+// (a rename, a deletion, a setting) within 3 s. The last state is always written: any change
+// after a write schedules the next one.
+let lastLibraryWrite = 0, libraryDue = 0;
+function scheduleLibraryWrite(recording) {
+  const wait = recording ? Math.max(3000, 30_000 - (Date.now() - lastLibraryWrite)) : 3000;
+  if (libraryTimer && libraryDue <= Date.now() + wait) return; // already due sooner
+  clearTimeout(libraryTimer);
+  libraryDue = Date.now() + wait;
+  libraryTimer = setTimeout(async () => {
+    libraryTimer = null;
+    lastLibraryWrite = Date.now();
+    await writeLibraryFile();
+  }, wait);
+}
 
 // An existing library (an update, or a reload of this version) is ready to be written out.
 chrome.storage.local.get(["meetings", "libraryReady"]).then(({ meetings, libraryReady }) => {
@@ -270,6 +293,8 @@ chrome.runtime.onMessage.addListener((msg, sender, reply) => {
       return false;
     case "writeLibrary": // sync was just turned on: write this device's file now, and say where
       clearTimeout(libraryTimer);
+      libraryTimer = null;
+      lastLibraryWrite = Date.now();
       writeLibraryFile().then((filename) => reply({ filename: filename || null }), () => reply({ filename: null }));
       return true;
     case "saveNow":

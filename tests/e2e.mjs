@@ -439,13 +439,22 @@ await close();
     await SYNC.setFolder(dir);
     const first = await SYNC.syncNow();
     const second = await SYNC.syncNow();
+    // The other computer writes again: only then is its file read again.
+    await new Promise((r) => setTimeout(r, 1100)); // a new modification time
+    await put("0ffice00.json", JSON.stringify({ ...other, savedAt: other.savedAt + 1 }));
+    const third = await SYNC.syncNow();
     const all = await chrome.storage.local.get(null);
-    return { first, second, meetings: all.meetings, x: all["t:X-1"], z: all["t:Z-1"], fx: all["f:X-1"], sync: all.sync };
+    return { first, second, third, meetings: all.meetings, x: all["t:X-1"], z: all["t:Z-1"], fx: all["f:X-1"], sync: all.sync };
   }, [other, me.id]);
   console.log("sync:", JSON.stringify(merged.first));
   assert.deepEqual([merged.first.added, merged.first.updated, merged.first.removed], [1, 1, 1]);
   assert.deepEqual(merged.first.devices, ["Office PC"]);
   assert.deepEqual([merged.second.added, merged.second.updated, merged.second.removed], [0, 0, 0], "syncing again changes nothing");
+  assert.equal(merged.first.read, 1, "only the other computer's library file is read");
+  assert.equal(merged.second.read, 0, "an unchanged file isn't read again");
+  assert.deepEqual(merged.second.devices, ["Office PC"], "and still counts as synced");
+  assert.equal(merged.third.read, 1, "a changed file is read again");
+  assert.deepEqual([merged.third.added, merged.third.updated, merged.third.removed], [0, 0, 0]);
   assert.deepEqual(Object.keys(merged.meetings).sort(), ["L-1", "X-1", "Z-1"], "Y deleted on the other device");
   assert.equal(merged.meetings["X-1"].syncedFrom, "Office PC");
   assert.equal(merged.x[0].text, "From the office.");
