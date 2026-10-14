@@ -1,5 +1,7 @@
 # Meeting Transcripts
 
+***Nobody knows that you're taking notes.***
+
 [![Download meeting-transcripts.zip](https://img.shields.io/badge/Download-meeting--transcripts.zip-2ea44f?style=for-the-badge&logo=googlechrome&logoColor=white)](https://github.com/saigonosenpai/meet-transcripts-chrome-extension/releases/latest/download/meeting-transcripts.zip)
 &nbsp; then follow the [install steps](#install) below.
 

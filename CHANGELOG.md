@@ -3,6 +3,10 @@
 Each version here becomes a release on GitHub, with the extension zip attached, as soon as
 it's pushed to `main` with the matching `version` in `manifest.json`.
 
+## 2.5.1
+
+- *Nobody knows that you're taking notes.* The tagline, in the popup and the README.
+
 ## 2.5.0
 
 - **Export and Import instead of Sync.** Syncing through a folder needed a cloud storage app
