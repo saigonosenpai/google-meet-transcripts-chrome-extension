@@ -194,7 +194,7 @@ await v.evaluate(() => chrome.storage.local.clear()); // what removing the exten
 await v.goto("about:blank");
 await v.goto(`chrome-extension://${id}/viewer/viewer.html#welcome`);
 await v.waitForSelector("#emptyLib:not([hidden])");
-assert.ok(await v.$("#importBtn.pulse"), "restore button highlighted on a fresh library");
+assert.ok(await v.$("#syncBtn.pulse"), "folder button highlighted on a fresh library");
 // What picking the folder hands the page: every file in it, day folders included.
 const folderFiles = fs.readdirSync(path.join(downloads, "Meeting Transcripts"), { recursive: true })
   .map((f) => path.join(downloads, "Meeting Transcripts", f)).filter((f) => fs.statSync(f).isFile());
@@ -491,7 +491,45 @@ await close();
   assert.equal(wrong.r.ok, false);
   assert.match(wrong.r.savesTo, /Meeting Transcripts$/);
   assert.equal(wrong.on, false);
-  console.log("sync across devices: merged a call, a newer rename and a deletion; own file skipped; wrong folder refused");
+  // Connecting a folder also brings back what's already in it, as Restore did: a library.json
+  // from a computer that never had sync, another computer's sync file and Word documents.
+  const docxPath = fs.readdirSync(dayDir).map((f) => path.join(dayDir, f)).find((f) => f.endsWith(".docx"));
+  const restored = await v.evaluate(async ([other, legacy, docx, docxName]) => {
+    await chrome.storage.local.clear(); // a fresh install on this computer
+    const root = await navigator.storage.getDirectory();
+    const dir = await root.getDirectoryHandle("Meeting Transcripts", { create: true });
+    const write = async (d, name, data) => {
+      const w = await (await d.getFileHandle(name, { create: true })).createWritable();
+      await w.write(data);
+      await w.close();
+    };
+    await write(dir, "library.json", JSON.stringify(legacy));
+    await write(await dir.getDirectoryHandle("devices", { create: true }), "0ffice00.json", JSON.stringify(other));
+    await write(await dir.getDirectoryHandle("2026-10-01", { create: true }), docxName, Uint8Array.from(atob(docx), (c) => c.charCodeAt(0)));
+    meetings = await MT.listMeetings();
+    const files = await SYNC.collectFiles(dir);
+    const first = await restoreFrom(files, () => {});
+    meetings = await MT.listMeetings();
+    const again = await restoreFrom(await SYNC.collectFiles(dir), () => {});
+    const all = await chrome.storage.local.get(null);
+    return { first, again, paths: files.map((f) => f.webkitRelativePath).sort(), meetings: all.meetings, settings: all.settings };
+  }, [other, { app: "meet-transcripts", kind: "library", version: 1, savedAt: Date.now(), settings: { myName: "Pat" },
+    meetings: { "W-1": meeting("W-1", "From the Windows library", T0 + 400_000) },
+    transcripts: { "W-1": [{ speaker: "Ann", text: "Saved before sync.", ts: T0 + 400_000 }] }, files: {} },
+    fs.readFileSync(docxPath).toString("base64"), path.basename(docxPath)]);
+  console.log("connect folder:", restored.first, "| again:", restored.again);
+  assert.deepEqual(restored.paths, ["Meeting Transcripts/2026-10-01/" + path.basename(docxPath),
+    "Meeting Transcripts/devices/0ffice00.json", "Meeting Transcripts/library.json"]);
+  const titles = await v.evaluate((ms) => Object.values(ms).map((m) => MT.title(m)).sort(), restored.meetings);
+  assert.ok(titles.includes("From the Windows library"), "library.json from a computer without sync");
+  assert.ok(titles.includes("Call on the office PC"), "another computer's sync file");
+  assert.ok(!Object.keys(restored.meetings).includes("Y-1"), "its deletion kept");
+  assert.equal(restored.meetings["W-1"].syncedFrom, undefined);
+  assert.equal(restored.meetings["X-1"].syncedFrom, "Office PC");
+  assert.equal(restored.settings.myName, "Pat", "settings from library.json");
+  assert.equal(Object.keys(restored.meetings).length, titles.length);
+  assert.match(restored.again, /^Restored 0 meetings/, "connecting again adds nothing");
+  console.log("sync across devices: merged a call, a newer rename and a deletion; own file skipped; wrong folder refused; connecting restores what's in the folder");
   await run.close();
 }
 

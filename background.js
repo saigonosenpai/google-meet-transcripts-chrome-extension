@@ -149,7 +149,7 @@ migrateFiles();
 //
 // Downloads/Meeting Transcripts/library.json holds every meeting (title, participants, every
 // line with speaker and time) and your settings, rewritten a few seconds after anything
-// changes. Removing the extension clears Chrome's copy; "Restore from folder…" in the
+// changes. Removing the extension clears Chrome's copy; "Sync" (connecting the folder) in the
 // transcripts page reads this file (and the .docx files) back.
 //
 // A fresh install must not overwrite a good library.json with a nearly empty library: until

@@ -65,7 +65,8 @@ the one that has `manifest.json` directly inside it. Then click **Select Folder*
 *Meeting Transcripts*, so its badge shows during calls.
 
 A "Meeting Transcripts" tab opens to welcome you. That's it: join a call and it records.
-If you've used the extension before, click **Restore from folder…** on that tab (see
+If you've used the extension before, click **Sync** on that tab and pick your
+`Meeting Transcripts` folder to bring your history back (see
 [library.json](#your-history-is-safe-libraryjson)).
 
 > **"Manifest file is missing or unreadable"?** The folder you selected doesn't contain
@@ -119,8 +120,10 @@ If you use git, you can instead clone this repository and select the cloned fold
   it, export it as Word, Markdown, text or JSON, or **Copy for AI** to paste into ChatGPT,
   Claude or Gemini for a summary.
 - **Survives reinstalls.** A `library.json` in the same folder keeps your history and
-  settings. Remove the extension, add it back, click **Restore from folder…** and it's all
-  there.
+  settings. Remove the extension, add it back, click **Sync** and it's all there.
+- **Every computer, one library.** Use it on several computers and each one shows the calls
+  from all of them, through a folder your cloud storage app (OneDrive, Google Drive,
+  Dropbox or iCloud Drive) keeps in sync.
 - **Private by design.** It reads the captions your call already shows you. Nothing is
   uploaded and nobody else in the call is notified.
 
@@ -163,7 +166,7 @@ used from then on:
 **After a reinstall** the library opens itself and points you to the one click that brings
 your history back:
 
-![The empty library after a reinstall, with the Restore from folder button highlighted](docs/screenshots/restore.png)
+![The empty library after a reinstall, with the Sync button highlighted](docs/screenshots/restore.png)
 
 ## Update to a new version
 
@@ -194,8 +197,8 @@ Old 1.x files left in your extension folder, like `content.js`, are simply ignor
 **What if I removed the extension, or loaded the new version from a different folder?**
 Removing an extension makes Chrome delete its stored data. Your `.docx` files and
 `library.json` in Downloads are untouched, though. Load the new version, and on the tab
-that opens click **Restore from folder…** and choose `Downloads › Meeting Transcripts` (or
-`Meet Transcripts`, if you were on 1.x). Everything comes back: meetings, transcripts,
+that opens click **Sync**, then **Choose folder…**, and pick `Downloads › Meeting Transcripts`
+(or `Meet Transcripts`, if you were on 1.x). Everything comes back: meetings, transcripts,
 names and settings.
 
 ## Using it
@@ -332,22 +335,28 @@ anything changes.
 After a reinstall (or on a new computer, after copying the `Meeting Transcripts` folder
 over):
 
-1. The Transcripts tab opens on its own, with **Restore from folder…** highlighted.
-2. Click it and choose your `Meeting Transcripts` folder. Chrome asks you to confirm the
-   upload; it isn't uploaded anywhere, it's only read by the extension.
-3. Everything is back.
+1. The Transcripts tab opens on its own, with **Sync** highlighted.
+2. Click it, then **Choose folder…**, and pick your `Meeting Transcripts` folder. Chrome asks
+   to let the extension read it; nothing is uploaded anywhere.
+3. Everything is back, and the folder stays connected (see
+   [Sync across devices](#sync-across-devices)).
 
-Restore reads `library.json` first and then any `.docx` files it doesn't already have, so
-even meetings recorded before `library.json` existed come back from their Word files. It
-never creates duplicates, so running it twice is harmless.
+Connecting reads `library.json` and the other computers' sync files, then any `.docx` files
+of meetings it doesn't already have, so even meetings recorded before `library.json` existed
+come back from their Word files. It never creates duplicates, so doing it twice is harmless.
 
 Why a click? Browsers don't let extensions read files on your computer unless you pick
-them, so the restore can't happen silently. Until you restore (or choose **Start a new
-library instead**), new calls are kept in a separate `library (since reinstall).json`,
-which is merged in and removed when you do restore. Nothing is overwritten.
+them, so this can't happen silently. Until you connect (or choose **Start a new library
+instead**), new calls are kept in a separate `library (since reinstall).json`, which is
+merged in when you do. Nothing is overwritten.
 
-**Don't delete or move `library.json`.** The `.docx` files are a backup of the transcripts,
-but only `library.json` holds your settings and edits.
+Once the folder is connected, this computer keeps its copy in
+`Meeting Transcripts/devices/<computer id>.json` instead of `library.json`; it holds the
+same things. In browsers that don't let extensions keep a folder (Brave turns it off),
+**Sync** does a one-time restore from the folder you pick instead.
+
+**Don't delete or move these files.** The `.docx` files are a backup of the transcripts,
+but only `library.json` and the files in `devices/` hold your settings and edits.
 
 ## Sync across devices
 
@@ -355,9 +364,21 @@ Use the extension on more than one computer, and every computer's library shows 
 from all of them, with their transcripts, the names you gave meetings and speakers, and
 deletions too. Your Word documents end up in the same shared folder.
 
-The extension still never connects to anything. Your own cloud app (Google Drive, OneDrive,
-Dropbox or iCloud Drive) moves the files between your computers; the extension only reads
-and writes them in your Downloads folder, as it always does.
+**You need a cloud storage app on your computers**, the kind that keeps a folder identical
+on all of them: OneDrive, Google Drive for desktop, Dropbox or iCloud Drive. It's not part of
+the extension; you probably have one already. Here's how the pieces fit:
+
+1. On computer A, the extension saves your calls in `Downloads › Meeting Transcripts`, a
+   file per computer, the same way it saves the Word documents.
+2. Your cloud storage app sees the changed file and copies it to computer B's copy of the
+   folder, through your cloud account. That's the only part that uses the internet, and it's
+   your cloud app doing it.
+3. On computer B, when you open the library or the popup, the extension reads computer A's
+   file from the folder and adds A's calls to B's library.
+
+The extension itself never connects to anything: it only reads and writes files in your
+Downloads folder, as it always does. Without a cloud storage app syncing that folder, nothing
+moves between computers.
 
 **1. Make `Downloads › Meeting Transcripts` a synced folder, on every computer.** Chrome only
 saves inside its download folder, so that's where the shared folder has to be. Either:
@@ -380,8 +401,8 @@ saves inside its download folder, so that's where the shared folder has to be. E
 Google Drive's **Back up folders from your computer** (My Computer › Add folder) won't do:
 it keeps a separate copy per computer instead of one shared folder.
 
-**2. Turn it on, on every computer.** Open **All Transcripts**, click **Sync across
-devices…** at the bottom left, give this computer a name (it's shown on calls it recorded),
+**2. Turn it on, on every computer.** Open **All Transcripts**, click **Sync** at the
+bottom left, give this computer a name (it's shown on calls it recorded),
 click **Choose folder…** and pick `Downloads › Meeting Transcripts`. When Chrome asks to let
 the extension see the folder, choose **Allow on every visit**.
 
@@ -396,8 +417,9 @@ How it works: each computer writes its whole library to
 never touches the other computers' files, so they can't overwrite each other. Each one reads
 the others and keeps the newest version of each call. A call you delete is marked as deleted
 in your computer's file, so it goes away everywhere; **Undo** brings it back everywhere.
-With sync on, these files replace `library.json`, and **Restore from folder…** reads them
-too. Settings (your name, switches) stay per computer.
+With sync on, these files replace `library.json`; connecting a computer also reads any
+`library.json` already in the folder, so a computer that hasn't connected yet still counts.
+Settings (your name, switches) stay per computer.
 
 ## Privacy
 
@@ -450,8 +472,8 @@ Yes. Renaming in the library is best because it keeps everything in sync, but mo
 file elsewhere is fine. A later save of that call writes a fresh copy back to the folder.
 
 **Can I use it on two computers?**
-Each computer keeps its own library. To move your history, copy the `Meeting Transcripts`
-folder to the new computer's Downloads and use **Restore from folder…**.
+Yes: see [Sync across devices](#sync-across-devices). To just move your history once, copy
+the `Meeting Transcripts` folder to the new computer's Downloads and click **Sync** there.
 
 ## Troubleshooting
 
@@ -483,7 +505,7 @@ manually from the library.
 Check for a newer version of the extension, or send a report as above.
 
 **My library is empty after updating.** You probably removed the extension or loaded the
-new version from a different folder. Click **Restore from folder…** and pick
+new version from a different folder. Click **Sync**, then **Choose folder…**, and pick
 `Downloads › Meeting Transcripts` (or `Meet Transcripts` from 1.x).
 
 **"This extension may have been corrupted" or it disappeared.** The folder you loaded it from
