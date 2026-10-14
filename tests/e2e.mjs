@@ -194,7 +194,7 @@ await v.evaluate(() => chrome.storage.local.clear()); // what removing the exten
 await v.goto("about:blank");
 await v.goto(`chrome-extension://${id}/viewer/viewer.html#welcome`);
 await v.waitForSelector("#emptyLib:not([hidden])");
-assert.ok(await v.$("#syncBtn.pulse"), "folder button highlighted on a fresh library");
+assert.ok(await v.$("#importBtn.pulse"), "Import highlighted on a fresh library");
 // What picking the folder hands the page: every file in it, day folders included.
 const folderFiles = fs.readdirSync(path.join(downloads, "Meeting Transcripts"), { recursive: true })
   .map((f) => path.join(downloads, "Meeting Transcripts", f)).filter((f) => fs.statSync(f).isFile());
@@ -208,7 +208,7 @@ const linesAfter = await v.evaluate(async () => Object.fromEntries(await Promise
   (await MT.listMeetings()).map(async (m) => [MT.title(m), (await MT.getTranscript(m.id)).length]))));
 assert.deepEqual(linesAfter, linesBefore, "every line restored, exactly as recorded");
 // library.json comes first; the .docx files of the same calls are recognized, not added twice.
-assert.equal(await v.textContent("#toastText"), "Restored 3 meetings · settings · 3 already here");
+assert.equal(await v.textContent("#toastText"), "Imported 3 calls · settings · 3 already here");
 // After a restore, library.json holds everything and the interim file is gone.
 const mainLib = path.join(downloads, "Meeting Transcripts", "library.json");
 for (let i = 0; i < 60 && !(fs.existsSync(mainLib) && !fs.existsSync(libraryPath)); i++) await v.waitForTimeout(250);
@@ -385,151 +385,85 @@ await close();
   await run.close();
 }
 
-// --- sync across devices ---------------------------------------------------------------------
-// The synced folder is stood in for by the browser's private file system (OPFS): the same
-// directory-handle API the real, picked folder uses, minus the picker no test can click.
+// --- moving the library to another computer: Export, then Import there ----------------------
 {
   const run = await launch();
   const v = await run.ctx.newPage();
   await v.goto(`chrome-extension://${id}/viewer/viewer.html`);
   const T0 = Date.now() - 3 * 3600_000;
   const meeting = (id, title, at) => ({ id, code: "abc-defg-hij", eventTitle: title, startedAt: at, endedAt: at + 600_000, speakers: ["Ann"] });
-  // Here: L (recorded here), Y (to be deleted elsewhere), Z (renamed elsewhere, later).
-  await v.evaluate(async ([L, Y, Z]) => {
-    for (const m of [L, Y, Z]) await MT.saveMeeting(m, [{ speaker: "Ann", text: "Hello " + m.id, ts: m.startedAt }]);
-  }, [meeting("L-1", "Local call", T0), meeting("Y-1", "Deleted elsewhere", T0 + 60_000), meeting("Z-1", "Old title", T0 + 120_000)]);
-  const me = await v.evaluate(() => MT.getDevice());
-  assert.match(me.id, /^[0-9a-f]{8}$/);
-
-  // Turning sync on: this device writes its own file into the folder, devices/<id>.json.
-  await v.evaluate(() => chrome.storage.local.set({ sync: { on: true } }));
-  const ownFile = path.join(run.downloads, "Meeting Transcripts", "devices", me.id + ".json");
-  for (let i = 0; i < 40 && !fs.existsSync(ownFile); i++) await v.waitForTimeout(250);
-  const own = JSON.parse(fs.readFileSync(ownFile, "utf8"));
-  assert.equal(own.device.id, me.id);
-  assert.deepEqual(Object.keys(own.meetings).sort(), ["L-1", "Y-1", "Z-1"]);
-
-  // Another computer's file, as its cloud app would bring it in.
-  const now = Date.now();
-  const other = {
-    app: "meet-transcripts", kind: "library", version: 1, savedAt: now, settings: {}, files: { "X-1": { downloadId: 7 } },
-    device: { id: "0ffice00", name: "Office PC" },
-    meetings: {
-      "X-1": { ...meeting("X-1", "Call on the office PC", T0 + 300_000), updatedAt: now - 1000 },
-      "L-1": { ...meeting("L-1", "Stale copy of the local call", T0), updatedAt: T0 + 1 },
-      "Z-1": { ...meeting("Z-1", "New title from the office", T0 + 120_000), renamed: true, title: "New title from the office", updatedAt: now },
-    },
-    transcripts: { "X-1": [{ speaker: "Bo", text: "From the office.", ts: T0 + 300_000 }],
-      "L-1": [{ speaker: "Ann", text: "stale", ts: T0 }], "Z-1": [{ speaker: "Ann", text: "Renamed there.", ts: T0 + 120_000 }] },
-    deleted: { "Y-1": now },
-  };
-  const merged = await v.evaluate(async ([other, myId]) => {
-    const root = await navigator.storage.getDirectory();
-    const dir = await root.getDirectoryHandle("synced", { create: true });
-    const devices = await dir.getDirectoryHandle("devices", { create: true });
-    const put = async (name, text) => {
-      const w = await (await devices.getFileHandle(name, { create: true })).createWritable();
-      await w.write(text);
-      await w.close();
-    };
-    await put("0ffice00.json", JSON.stringify(other));
-    // This device's own file is skipped, whatever it holds.
-    await put(myId + ".json", JSON.stringify({ ...other, device: { id: myId, name: "me" }, meetings: {}, deleted: { "L-1": Date.now() } }));
-    await put("notes.txt", "not a library");
-    await SYNC.setFolder(dir);
-    const first = await SYNC.syncNow();
-    const second = await SYNC.syncNow();
-    // The other computer writes again: only then is its file read again.
-    await new Promise((r) => setTimeout(r, 1100)); // a new modification time
-    await put("0ffice00.json", JSON.stringify({ ...other, savedAt: other.savedAt + 1 }));
-    const third = await SYNC.syncNow();
-    const all = await chrome.storage.local.get(null);
-    return { first, second, third, meetings: all.meetings, x: all["t:X-1"], z: all["t:Z-1"], fx: all["f:X-1"], sync: all.sync };
-  }, [other, me.id]);
-  console.log("sync:", JSON.stringify(merged.first));
-  assert.deepEqual([merged.first.added, merged.first.updated, merged.first.removed], [1, 1, 1]);
-  assert.deepEqual(merged.first.devices, ["Office PC"]);
-  assert.deepEqual([merged.second.added, merged.second.updated, merged.second.removed], [0, 0, 0], "syncing again changes nothing");
-  assert.equal(merged.first.read, 1, "only the other computer's library file is read");
-  assert.equal(merged.second.read, 0, "an unchanged file isn't read again");
-  assert.deepEqual(merged.second.devices, ["Office PC"], "and still counts as synced");
-  assert.equal(merged.third.read, 1, "a changed file is read again");
-  assert.deepEqual([merged.third.added, merged.third.updated, merged.third.removed], [0, 0, 0]);
-  assert.deepEqual(Object.keys(merged.meetings).sort(), ["L-1", "X-1", "Z-1"], "Y deleted on the other device");
-  assert.equal(merged.meetings["X-1"].syncedFrom, "Office PC");
-  assert.equal(merged.x[0].text, "From the office.");
-  assert.equal(merged.fx, undefined, "the other device's saved-file record isn't taken");
-  assert.equal(merged.meetings["L-1"].eventTitle, "Local call", "an older copy doesn't win");
-  assert.equal(merged.meetings["L-1"].syncedFrom, undefined);
-  assert.equal(await v.evaluate((m) => MT.title(m), merged.meetings["Z-1"]), "New title from the office", "the newer copy wins");
-  assert.equal(merged.z[0].text, "Renamed there.");
-  assert.deepEqual(merged.sync.devices, ["Office PC"]);
-
-  // The library shows where a call came from, and how sync stands.
+  // "Computer A": two calls, exported.
+  await v.evaluate(async ([A, B]) => {
+    await chrome.storage.local.set({ device: { id: "aaaa0001", name: "Office PC" } });
+    for (const m of [A, B]) await MT.saveMeeting(m, [{ speaker: "Ann", text: "Hello " + m.id, ts: m.startedAt }]);
+    await MT.updateMeeting("B-1", { title: "Renamed at the office", renamed: true });
+  }, [meeting("A-1", "Planning", T0), meeting("B-1", "Review", T0 + 60_000)]);
   await v.reload();
-  await v.waitForFunction(() => /Synced with Office PC/.test(document.getElementById("syncLabel").textContent));
-  await v.goto(`chrome-extension://${id}/viewer/viewer.html#X-1`);
+  await v.click("#libExport");
+  const exportDir = run.downloads;
+  let exported = null;
+  for (let i = 0; i < 40 && !exported; i++) {
+    await v.waitForTimeout(250);
+    exported = fs.readdirSync(exportDir).find((f) => /^Meeting Transcripts library - \d{4}-\d\d-\d\d - Office PC\.json$/.test(f)) || null;
+  }
+  assert.ok(exported, "export saved to Downloads, named after the computer: " + fs.readdirSync(exportDir).join(" | "));
+  const file = JSON.parse(fs.readFileSync(path.join(exportDir, exported), "utf8"));
+  assert.deepEqual(Object.keys(file.meetings).sort(), ["A-1", "B-1"]);
+  assert.equal(file.device.name, "Office PC");
+
+  // "Computer B": its own call C, an older copy of B, and A it doesn't have.
+  await v.evaluate(async ([B, C]) => {
+    await chrome.storage.local.clear();
+    await chrome.storage.local.set({ device: { id: "bbbb0002", name: "Home laptop" }, libraryReady: true });
+    await MT.saveMeeting(C, [{ speaker: "Bo", text: "Only here.", ts: C.startedAt }]);
+    await chrome.storage.local.set({ meetings: { ...(await chrome.storage.local.get("meetings")).meetings,
+      "B-1": { ...B, title: "Old title", updatedAt: B.startedAt } }, "t:B-1": [{ speaker: "Ann", text: "old", ts: B.startedAt }] });
+  }, [meeting("B-1", "Review", T0 + 60_000), meeting("C-1", "Home call", T0 + 120_000)]);
+  await v.reload();
+  const importFile = async (paths) => {
+    await v.setInputFiles("#importInput", paths);
+    await v.waitForSelector("#toast.show");
+    const text = await v.textContent("#toastText");
+    await v.evaluate(() => hideToast());
+    return text;
+  };
+  const first = await importFile([path.join(exportDir, exported)]);
+  const after = await v.evaluate(async () => {
+    const all = await chrome.storage.local.get(null);
+    return { meetings: all.meetings, b: all["t:B-1"] };
+  });
+  console.log("import:", first);
+  assert.equal(first, "Imported 2 calls");
+  assert.deepEqual(Object.keys(after.meetings).sort(), ["A-1", "B-1", "C-1"], "nothing removed, A added");
+  assert.equal(after.meetings["A-1"].syncedFrom, "Office PC");
+  assert.equal(await v.evaluate((m) => MT.title(m), after.meetings["B-1"]), "Renamed at the office", "the newer copy wins");
+  assert.equal(after.b[0].text, "Hello B-1");
+  assert.equal(after.meetings["C-1"].syncedFrom, undefined);
+  const again = await importFile([path.join(exportDir, exported)]);
+  assert.equal(again, "Imported 0 calls · 2 already here", "importing twice changes nothing");
+  await v.goto(`chrome-extension://${id}/viewer/viewer.html#A-1`);
   await v.waitForFunction(() => document.getElementById("file").textContent.includes("Recorded on Office PC"));
 
-  // A deletion here goes out in this device's file, for the others.
-  await v.evaluate(() => MT.deleteMeeting("X-1"));
-  let out = null;
-  for (let i = 0; i < 40 && !(out && out.deleted && out.deleted["X-1"]); i++) {
-    await v.waitForTimeout(250);
-    try { out = JSON.parse(fs.readFileSync(ownFile, "utf8")); } catch {}
-  }
-  assert.ok(out.deleted["X-1"], "deletion written for the other devices");
-  assert.ok(!out.meetings["X-1"]);
+  // A 2.4 sync file (devices/<id>.json) imports the same way.
+  const syncFile = path.join(run.downloads, "old-sync.json");
+  fs.writeFileSync(syncFile, JSON.stringify({ ...file, device: { id: "cccc0003", name: "Old Mac" }, meetings: { "D-1": meeting("D-1", "From 2.4", T0 + 200_000) },
+    transcripts: { "D-1": [{ speaker: "Ann", text: "Synced in 2.4.", ts: T0 + 200_000 }] }, deleted: { "C-1": Date.now() } }));
+  await v.goto(`chrome-extension://${id}/viewer/viewer.html`);
+  assert.equal(await importFile([syncFile]), "Imported 1 call");
+  assert.ok((await v.evaluate(() => MT.listMeetings())).some((m) => m.id === "C-1"), "an old file's deletions don't apply");
 
-  // Choosing a folder this device doesn't save into is refused, and sync stays off.
-  const wrong = await v.evaluate(async () => {
-    await SYNC.turnOff();
-    const dir = await (await navigator.storage.getDirectory()).getDirectoryHandle("elsewhere", { create: true });
-    const r = await SYNC.turnOn(dir);
-    return { r, on: (await SYNC.state()).on };
-  });
-  assert.equal(wrong.r.ok, false);
-  assert.match(wrong.r.savesTo, /Meeting Transcripts$/);
-  assert.equal(wrong.on, false);
-  // Connecting a folder also brings back what's already in it, as Restore did: a library.json
-  // from a computer that never had sync, another computer's sync file and Word documents.
-  const docxPath = fs.readdirSync(dayDir).map((f) => path.join(dayDir, f)).find((f) => f.endsWith(".docx"));
-  const restored = await v.evaluate(async ([other, legacy, docx, docxName]) => {
-    await chrome.storage.local.clear(); // a fresh install on this computer
-    const root = await navigator.storage.getDirectory();
-    const dir = await root.getDirectoryHandle("Meeting Transcripts", { create: true });
-    const write = async (d, name, data) => {
-      const w = await (await d.getFileHandle(name, { create: true })).createWritable();
-      await w.write(data);
-      await w.close();
-    };
-    await write(dir, "library.json", JSON.stringify(legacy));
-    await write(await dir.getDirectoryHandle("devices", { create: true }), "0ffice00.json", JSON.stringify(other));
-    await write(await dir.getDirectoryHandle("2026-10-01", { create: true }), docxName, Uint8Array.from(atob(docx), (c) => c.charCodeAt(0)));
-    meetings = await MT.listMeetings();
-    const files = await SYNC.collectFiles(dir);
-    const first = await restoreFrom(files, () => {});
-    meetings = await MT.listMeetings();
-    const again = await restoreFrom(await SYNC.collectFiles(dir), () => {});
-    const all = await chrome.storage.local.get(null);
-    return { first, again, paths: files.map((f) => f.webkitRelativePath).sort(), meetings: all.meetings, settings: all.settings };
-  }, [other, { app: "meet-transcripts", kind: "library", version: 1, savedAt: Date.now(), settings: { myName: "Pat" },
-    meetings: { "W-1": meeting("W-1", "From the Windows library", T0 + 400_000) },
-    transcripts: { "W-1": [{ speaker: "Ann", text: "Saved before sync.", ts: T0 + 400_000 }] }, files: {} },
-    fs.readFileSync(docxPath).toString("base64"), path.basename(docxPath)]);
-  console.log("connect folder:", restored.first, "| again:", restored.again);
-  assert.deepEqual(restored.paths, ["Meeting Transcripts/2026-10-01/" + path.basename(docxPath),
-    "Meeting Transcripts/devices/0ffice00.json", "Meeting Transcripts/library.json"]);
-  const titles = await v.evaluate((ms) => Object.values(ms).map((m) => MT.title(m)).sort(), restored.meetings);
-  assert.ok(titles.includes("From the Windows library"), "library.json from a computer without sync");
-  assert.ok(titles.includes("Call on the office PC"), "another computer's sync file");
-  assert.ok(!Object.keys(restored.meetings).includes("Y-1"), "its deletion kept");
-  assert.equal(restored.meetings["W-1"].syncedFrom, undefined);
-  assert.equal(restored.meetings["X-1"].syncedFrom, "Office PC");
-  assert.equal(restored.settings.myName, "Pat", "settings from library.json");
-  assert.equal(Object.keys(restored.meetings).length, titles.length);
-  assert.match(restored.again, /^Restored 0 meetings/, "connecting again adds nothing");
-  console.log("sync across devices: merged a call, a newer rename and a deletion; own file skipped; wrong folder refused; connecting restores what's in the folder");
+  // A computer that had 2.4's folder sync on goes back to writing library.json.
+  await v.evaluate(() => chrome.storage.local.set({ sync: { on: true }, deleted: { x: 1 } }));
+  const cdp = await run.browser.newBrowserCDPSession();
+  const { targetInfos } = await cdp.send("Target.getTargets");
+  for (const t of targetInfos.filter((t) => t.type === "service_worker" && t.url.includes(id))) await cdp.send("Target.closeTarget", { targetId: t.targetId });
+  await v.waitForTimeout(500);
+  await v.evaluate(() => chrome.runtime.sendMessage({ type: "ping" }).catch(() => {}));
+  const lib = path.join(run.downloads, "Meeting Transcripts", "library.json");
+  for (let i = 0; i < 40 && !fs.existsSync(lib); i++) await v.waitForTimeout(250);
+  assert.ok(fs.existsSync(lib), "library.json written again");
+  assert.deepEqual(await v.evaluate(() => chrome.storage.local.get(["sync", "deleted"])), {}, "2.4 sync state forgotten");
+  console.log("export/import: exported 2 calls, imported them elsewhere (newer copy wins, nothing removed), twice is harmless; 2.4 sync files import; 2.4 sync turned off");
   await run.close();
 }
 

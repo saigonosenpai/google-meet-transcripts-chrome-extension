@@ -156,11 +156,6 @@ migrateFiles();
 // the history is restored (or you choose to start fresh, "libraryReady"), it writes
 // "library (since reinstall).json" instead. Restore reads both and then keeps one.
 
-// With sync across devices on, each device writes its own file instead,
-// Meeting Transcripts/devices/<device id>.json, so devices sharing the folder (through Google
-// Drive, OneDrive, Dropbox or iCloud) never overwrite each other; each reads the others' files
-// and merges them in (lib/sync.js). It holds deletions too, so they reach the other devices.
-
 const LIBRARY_FILE = FOLDER + "/library.json";
 const INTERIM_FILE = FOLDER + "/library (since reinstall).json";
 const BACKED_UP = ["hideCaptions", "myName", "autoSave", "showIndicator", "platforms", "nameMap"]; // not "paused": that's momentary
@@ -168,12 +163,9 @@ let libraryTimer = null;
 
 async function writeLibraryFile() {
   const all = await chrome.storage.local.get(null);
-  const synced = !!(all.sync && all.sync.on);
-  if (!synced && !all.libraryReady && !Object.keys(all.meetings || {}).length) return; // nothing to keep yet
-  // A synced device only ever writes its own file, so a fresh install can't overwrite anything.
-  const device = synced ? await MT.getDevice() : null;
-  const filename = synced ? `${FOLDER}/devices/${device.id}.json` : all.libraryReady ? LIBRARY_FILE : INTERIM_FILE;
-  const idKey = synced ? "deviceFileDownloadId" : all.libraryReady ? "libraryDownloadId" : "interimDownloadId";
+  if (!all.libraryReady && !Object.keys(all.meetings || {}).length) return; // nothing to keep yet
+  const filename = all.libraryReady ? LIBRARY_FILE : INTERIM_FILE;
+  const idKey = all.libraryReady ? "libraryDownloadId" : "interimDownloadId";
   const settings = Object.fromEntries(BACKED_UP.filter((k) => all.settings && k in all.settings).map((k) => [k, all.settings[k]]));
   const transcripts = {}, files = {};
   for (const [k, v] of Object.entries(all)) {
@@ -181,8 +173,7 @@ async function writeLibraryFile() {
     if (k.startsWith("f:")) files[k.slice(2)] = v;
   }
   const json = JSON.stringify({ app: "meet-transcripts", kind: "library", version: 1, savedAt: Date.now(),
-    settings, meetings: all.meetings || {}, transcripts, files,
-    ...(synced ? { device, deleted: all.deleted || {} } : {}) });
+    settings, meetings: all.meetings || {}, transcripts, files });
   const bytes = new TextEncoder().encode(json);
   let bin = "";
   for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
@@ -199,7 +190,6 @@ async function writeLibraryFile() {
       await chrome.downloads.erase({ id: all[idKey] }).catch(() => {});
     }
     await chrome.storage.local.set({ [idKey]: id, librarySavedAt: Date.now() });
-    if (synced) return written.filename;
     // Once library.json holds everything, the interim file has served its purpose. Find it in
     // Chrome's download history: an earlier install may have written it.
     if (all.libraryReady) {
@@ -217,14 +207,10 @@ async function writeLibraryFile() {
   }
 }
 
-const isHistoryKey = (k) => k === "meetings" || k === "settings" || k === "libraryReady" || k === "deleted" || k === "sync" || k === "device" ||
-  k.startsWith("t:") || k.startsWith("f:");
+const isHistoryKey = (k) => k === "meetings" || k === "settings" || k === "libraryReady" || k.startsWith("t:") || k.startsWith("f:");
 
 chrome.storage.onChanged.addListener((changes, area) => {
   if (area !== "local" || !Object.keys(changes).some(isHistoryKey)) return;
-  // Sync's own bookkeeping (when it last ran) isn't history; only turning it on or off is.
-  if (Object.keys(changes).every((k) => k === "sync") &&
-    !!(changes.sync.oldValue || {}).on === !!(changes.sync.newValue || {}).on) return;
   if (changes.settings && !changes.meetings && !Object.keys(changes).some((k) => k.startsWith("t:"))) {
     const before = changes.settings.oldValue || {}, after = changes.settings.newValue || {};
     if (!BACKED_UP.some((k) => JSON.stringify(before[k]) !== JSON.stringify(after[k]))) return; // only "paused" moved
@@ -249,6 +235,14 @@ function scheduleLibraryWrite(recording) {
     await writeLibraryFile();
   }, wait);
 }
+
+// 2.4 could sync through a folder, writing Meeting Transcripts/devices/<id>.json instead of
+// library.json. That's gone (Export and Import in the library replace it): forget its state, so
+// library.json is written again; a devices/ file can still be imported.
+chrome.storage.local.get("sync").then(({ sync }) => {
+  if (sync) chrome.storage.local.remove(["sync", "deleted", "deviceFileDownloadId"])
+    .then(() => chrome.storage.local.set({ libraryReady: true })).then(() => scheduleLibraryWrite(false));
+});
 
 // An existing library (an update, or a reload of this version) is ready to be written out.
 chrome.storage.local.get(["meetings", "libraryReady"]).then(({ meetings, libraryReady }) => {
@@ -291,12 +285,6 @@ chrome.runtime.onMessage.addListener((msg, sender, reply) => {
     case "resave": // renamed in the viewer: bring an already saved file up to date
       MT.getFile(msg.id).then((f) => f && f.downloadId && saveDoc(msg.id).catch(() => {}));
       return false;
-    case "writeLibrary": // sync was just turned on: write this device's file now, and say where
-      clearTimeout(libraryTimer);
-      libraryTimer = null;
-      lastLibraryWrite = Date.now();
-      writeLibraryFile().then((filename) => reply({ filename: filename || null }), () => reply({ filename: null }));
-      return true;
     case "saveNow":
       saveDoc(msg.id, { manual: true })
         .then((r) => reply({ ok: true, result: r }), (e) => reply({ ok: false, error: e.message }));

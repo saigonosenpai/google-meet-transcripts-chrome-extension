@@ -18,17 +18,22 @@
     <div id="emptyLib" class="empty-state" hidden>
       <strong>No transcripts yet</strong>
       Join a Google Meet, Microsoft Teams or Zoom call in Chrome with captions on, and it shows up here as you talk.
-      Used it before, or on another computer? Click <b>Sync</b> below and pick
-      <span class="path">Downloads › Meeting Transcripts</span> (or <span class="path">Meet Transcripts</span>
-      from older versions) to bring back your history and settings.
+      Used it before, or on another computer? Click <b>Import</b> below and pick
+      <span class="path">library.json</span> from <span class="path">Downloads › Meeting Transcripts</span>
+      (or <span class="path">Meet Transcripts</span> from older versions), or a library you exported,
+      to bring back your history.
       <span id="welcomeChoice" hidden><br><button id="startFresh" class="btn link">Start a new library instead</button></span>
     </div>
     <div class="sidebar-foot">
-      <button id="syncBtn" class="btn" title="Connect your Meeting Transcripts folder: brings back the history saved there and keeps this library in step with your other computers">
-        <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M13 6.5A5 5 0 0 0 3.6 5M3 9.5A5 5 0 0 0 12.4 11M3.5 2.5V5H6M12.5 13.5V11H10"/></svg>
-        <span id="syncLabel">Sync</span>
+      <button id="importBtn" class="btn" title="Add calls from a library file: library.json after a reinstall, or a library exported on another computer (or Word documents)">
+        <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 2v8m0 0-3-3m3 3 3-3M3 11v1.5a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1V11"/></svg>
+        Import…
       </button>
-      <input id="importInput" type="file" webkitdirectory multiple hidden>
+      <button id="libExport" class="btn" title="Save your whole library as one file, to import on another computer">
+        <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 10V2m0 0L5 5m3-3 3 3M3 11v1.5a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1V11"/></svg>
+        Export
+      </button>
+      <input id="importInput" type="file" accept=".json,.docx" multiple hidden>
     </div>
   </aside>
 
@@ -93,42 +98,10 @@
   </main>
 
   <div id="toast" role="status" aria-live="polite"><span id="toastText"></span><button id="toastAction" hidden></button></div>
-  <dialog id="syncDialog" aria-labelledby="syncTitle">
-    <form method="dialog" class="sync">
-      <h2 id="syncTitle">Sync</h2>
-      <div id="syncOff">
-        <p>Connect <span class="path">Downloads › Meeting Transcripts</span> to bring back the history
-          saved there (after a reinstall, or from another computer) and keep this library up to date
-          with your other computers.</p>
-        <ol>
-          <li>Name this computer, then choose that folder. Chrome asks to let the extension read it:
-            pick <b>Allow on every visit</b>.</li>
-          <li>Using several computers? Put that folder in a cloud storage app installed on your
-            computers (OneDrive, Google Drive for desktop, Dropbox or iCloud Drive), and connect it
-            on each. <a href="https://github.com/saigonosenpai/meet-transcripts-chrome-extension#sync-across-devices" target="_blank" rel="noopener">How, for each app</a></li>
-        </ol>
-        <p>How it works: each computer saves its calls in that folder; your cloud storage app copies
-          the folder between your computers; the extension reads the other computers' calls from
-          it. The extension itself never connects to anything.</p>
-      </div>
-      <div id="syncOn" hidden>
-        <p id="syncStatus"></p>
-      </div>
-      <label class="field">This computer <input id="deviceName" type="text" maxlength="40" autocomplete="off"></label>
-      <p id="syncError" class="err" hidden></p>
-      <div class="actions">
-        <button id="syncOffBtn" type="button" class="btn" hidden>Turn off</button>
-        <button value="close" class="btn">Close</button>
-        <button id="syncNowBtn" type="button" class="btn primary" hidden>Sync now</button>
-        <button id="syncPick" type="button" class="btn primary">Choose folder…</button>
-      </div>
-    </form>
-  </dialog>
 
   <script src="../lib/shared.js"></script>
   <script src="../lib/docx.js"></script>
   <script src="../lib/docximport.js"></script>
-  <script src="../lib/sync.js"></script>
   <script src="viewer.js"></script>
 </body>
 </html>

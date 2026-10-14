@@ -66,9 +66,8 @@ function render() {
 
 // The meetings and their saved-file records (f:<id>), without loading every transcript.
 async function libraryRecords() {
-  const base = await chrome.storage.local.get(["meetings", "libraryDownloadId", "deviceFileDownloadId", "librarySavedAt", "sync"]);
-  // With sync on, the backup is this device's file in devices/, instead of library.json.
-  base.backupId = base.sync && base.sync.on ? base.deviceFileDownloadId : base.libraryDownloadId;
+  const base = await chrome.storage.local.get(["meetings", "libraryDownloadId", "librarySavedAt"]);
+  base.backupId = base.libraryDownloadId;
   const files = await chrome.storage.local.get(Object.keys(base.meetings || {}).map((id) => "f:" + id));
   return { ...base, ...files };
 }
@@ -186,9 +185,6 @@ async function init() {
   renderStats();
   await refresh();
   setInterval(refresh, 2000);
-  // Calls from your other devices, if sync is on and Chrome already allows reading the folder
-  // (asking needs a click, which the library page's Sync button offers).
-  SYNC.syncNow().then(() => renderStats()).catch(() => {});
 }
 
 init();
