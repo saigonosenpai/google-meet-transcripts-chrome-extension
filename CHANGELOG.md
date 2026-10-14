@@ -3,6 +3,22 @@
 Each version here becomes a release on GitHub, with the extension zip attached, as soon as
 it's pushed to `main` with the matching `version` in `manifest.json`.
 
+## 2.5.2
+
+- **Fixed: `library.json` could be replaced by an empty library.** After the extension was
+  removed and added back (which empties Chrome's copy), updating it marked that empty
+  library as ready, and the next change wrote it over the full `library.json`. Now an empty
+  library is never written, and a fresh install only writes `library.json` once you've
+  imported (or chosen to start a new library). If it happened to you: your calls are still in
+  the Word documents. **Import › Meeting Transcripts folder…** brings them back.
+- **Import takes a whole folder again.** **Import › Meeting Transcripts folder…** reads
+  `library.json` and every Word document in the day folders; **Import › File…** takes an
+  exported library or single files.
+
+## 2.5.1
+
+- *Nobody knows that you're taking notes.* The tagline, in the popup and the README.
+
 ## 2.5.0
 
 - **Export and Import instead of Sync.** Syncing through a folder needed a cloud storage app

@@ -1,5 +1,7 @@
 # Meeting Transcripts
 
+***Nobody knows that you're taking notes.***
+
 [![Download meeting-transcripts.zip](https://img.shields.io/badge/Download-meeting--transcripts.zip-2ea44f?style=for-the-badge&logo=googlechrome&logoColor=white)](https://github.com/saigonosenpai/meet-transcripts-chrome-extension/releases/latest/download/meeting-transcripts.zip)
 &nbsp; then follow the [install steps](#install) below.
 
@@ -65,8 +67,8 @@ the one that has `manifest.json` directly inside it. Then click **Select Folder*
 *Meeting Transcripts*, so its badge shows during calls.
 
 A "Meeting Transcripts" tab opens to welcome you. That's it: join a call and it records.
-If you've used the extension before, click **Import** on that tab and pick `library.json`
-from your `Meeting Transcripts` folder to bring your history back (see
+If you've used the extension before, click **Import › Meeting Transcripts folder…** on that
+tab and choose `Downloads › Meeting Transcripts` to bring your history back (see
 [library.json](#your-history-is-safe-libraryjson)).
 
 > **"Manifest file is missing or unreadable"?** The folder you selected doesn't contain
@@ -196,8 +198,8 @@ Old 1.x files left in your extension folder, like `content.js`, are simply ignor
 **What if I removed the extension, or loaded the new version from a different folder?**
 Removing an extension makes Chrome delete its stored data. Your `.docx` files and
 `library.json` in Downloads are untouched, though. Load the new version, and on the tab
-that opens click **Import** and pick `library.json` in `Downloads › Meeting Transcripts`
-(or `Meet Transcripts`, if you were on 1.x). Everything comes back: meetings, transcripts,
+that opens click **Import › Meeting Transcripts folder…** and choose
+`Downloads › Meeting Transcripts` (or `Meet Transcripts`, if you were on 1.x). Everything comes back: meetings, transcripts,
 names and settings.
 
 ## Using it
@@ -334,13 +336,20 @@ anything changes.
 After a reinstall:
 
 1. The Transcripts tab opens on its own, with **Import** highlighted.
-2. Click it and pick `library.json` in `Downloads › Meeting Transcripts`. Chrome asks you to
-   confirm the upload; it isn't uploaded anywhere, it's only read by the extension.
+2. Click it, choose **Meeting Transcripts folder…** and pick `Downloads › Meeting Transcripts`.
+   Chrome asks you to confirm the upload; it isn't uploaded anywhere, it's only read by the
+   extension.
 3. Everything is back.
 
-You can also select Word documents along with it (or instead): calls that `library.json`
-doesn't have, like ones recorded before it existed, come back from their `.docx` files.
-Import never creates duplicates and never removes anything, so doing it twice is harmless.
+Importing the folder reads `library.json` and every Word document in its day folders: calls
+that `library.json` doesn't have, like ones recorded before it existed, come back from their
+`.docx` files. So even if `library.json` were lost, your calls come back from the Word
+documents. Import never creates duplicates and never removes anything, so doing it twice is
+harmless.
+
+An empty library never replaces `library.json`, and a fresh install doesn't write it at all
+until you've imported (its new calls wait in `library (since reinstall).json`), so a reinstall
+or an update can't wipe your history.
 
 Why a click? Browsers don't let extensions read files on your computer unless you pick
 them, so this can't happen silently. Until you import (or choose **Start a new library
@@ -359,7 +368,7 @@ Each computer keeps its own library. To bring calls from one computer to another
    `Meeting Transcripts library - 2026-10-14 - Windows PC.json`.
 2. Move that file to the other computer however you like: email it to yourself, a USB stick,
    a shared drive.
-3. On the other computer, open **All Transcripts**, click **Import** and pick the file.
+3. On the other computer, open **All Transcripts**, click **Import › File…** and pick the file.
 
 Calls the other computer doesn't have are added, labelled **Recorded on** *the computer they
 came from*. A call that was renamed or edited more recently on the first computer is
@@ -454,8 +463,9 @@ manually from the library.
 Check for a newer version of the extension, or send a report as above.
 
 **My library is empty after updating.** You probably removed the extension or loaded the
-new version from a different folder. Click **Import** and pick `library.json` in
-`Downloads › Meeting Transcripts` (or `Meet Transcripts` from 1.x).
+new version from a different folder. Click **Import › Meeting Transcripts folder…** and pick
+`Downloads › Meeting Transcripts` (or `Meet Transcripts` from 1.x). That brings back every
+call from `library.json` and from the Word documents, even if `library.json` is empty.
 
 **"This extension may have been corrupted" or it disappeared.** The folder you loaded it from
 was moved or deleted. Put it back (or download it again), then **Load unpacked** again and

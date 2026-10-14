@@ -385,6 +385,71 @@ await close();
   await run.close();
 }
 
+// --- library.json is never replaced by an empty or an unimported library ----------------------
+// What happened to a real library: an install with an empty library (removed and added back)
+// was then updated, which marked it ready, and the next change wrote an empty library.json over
+// the full one. Nothing may do that.
+{
+  const run = await launch();
+  const v = await run.ctx.newPage();
+  await v.goto(`chrome-extension://${id}/viewer/viewer.html`);
+  const lib = path.join(run.downloads, "Meeting Transcripts", "library.json");
+  const T0 = Date.now() - 86400_000;
+  const full = { app: "meet-transcripts", kind: "library", version: 1, savedAt: T0, settings: { myName: "Sam" },
+    meetings: { "K-1": { id: "K-1", code: "abc-defg-hij", eventTitle: "Kept call", startedAt: T0, endedAt: T0 + 60_000, speakers: ["Ann"] } },
+    transcripts: { "K-1": [{ speaker: "Ann", text: "Keep me.", ts: T0 }] }, files: {} };
+  // The full library.json an earlier install wrote (it's in Chrome's download history).
+  await v.evaluate(async (json) => {
+    const id = await chrome.downloads.download({ url: "data:application/json;base64," + btoa(json), filename: "Meeting Transcripts/library.json" });
+    await new Promise((r) => { const t = setInterval(async () => { const [it] = await chrome.downloads.search({ id }); if (it && it.state === "complete") { clearInterval(t); r(); } }, 100); });
+  }, JSON.stringify(full));
+  const intact = () => JSON.parse(fs.readFileSync(lib, "utf8")).meetings["K-1"] !== undefined;
+  assert.ok(intact());
+  const restartWorker = async () => {
+    const cdp = await run.browser.newBrowserCDPSession();
+    const { targetInfos } = await cdp.send("Target.getTargets");
+    for (const t of targetInfos.filter((t) => t.type === "service_worker" && t.url.includes(id))) await cdp.send("Target.closeTarget", { targetId: t.targetId });
+    await v.waitForTimeout(500);
+    await v.evaluate(() => chrome.runtime.sendMessage({ type: "ping" }).catch(() => {}));
+  };
+  // 1. Empty, and marked ready (as the update used to do), then a setting changes: not written.
+  await v.evaluate(() => chrome.storage.local.set({ libraryReady: true }));
+  await v.evaluate(() => MT.saveSettings({ myName: "Someone" }));
+  await v.waitForTimeout(4500);
+  assert.ok(intact(), "an empty library never replaces library.json");
+  // 2. An install from before the ready flag (undefined) with a new call, its worker restarted
+  //    (as on an update): library.json is someone's history to import, so it isn't "ready".
+  await v.evaluate(async () => {
+    await chrome.storage.local.remove(["libraryReady", "libraryDownloadId"]);
+    await MT.saveMeeting({ id: "N-1", code: "xyz-abcd-efg", eventTitle: "New call", startedAt: Date.now(), endedAt: Date.now(), speakers: ["Bo"] },
+      [{ speaker: "Bo", text: "Hello.", ts: Date.now() }]);
+  });
+  await restartWorker();
+  await v.waitForTimeout(4500);
+  assert.equal((await v.evaluate(() => chrome.storage.local.get("libraryReady"))).libraryReady, false, "not ready while a library.json waits");
+  assert.ok(intact(), "library.json untouched");
+  assert.ok(fs.existsSync(path.join(run.downloads, "Meeting Transcripts", "library (since reinstall).json")), "new calls kept in the interim file");
+  // 3. Importing nothing (an empty export) doesn't make it ready either.
+  const empty = path.join(run.downloads, "empty.json");
+  fs.writeFileSync(empty, JSON.stringify({ ...full, device: { id: "e0000000", name: "Elsewhere" }, meetings: {}, transcripts: {} }));
+  await v.reload();
+  await v.setInputFiles("#importInput", [empty]);
+  await v.waitForSelector("#toast.show");
+  assert.equal((await v.evaluate(() => chrome.storage.local.get("libraryReady"))).libraryReady, false);
+  // 4. Importing the folder (library.json and all) does: everything is kept, merged.
+  await v.evaluate(() => hideToast());
+  await v.evaluate(() => document.getElementById("importFolder").removeAttribute("webkitdirectory"));
+  const folderFiles = fs.readdirSync(path.join(run.downloads, "Meeting Transcripts")).map((f) => path.join(run.downloads, "Meeting Transcripts", f));
+  await v.setInputFiles("#importFolder", folderFiles);
+  await v.waitForSelector("#toast.show");
+  console.log("import folder:", await v.textContent("#toastText"));
+  for (let i = 0; i < 40 && !(fs.existsSync(lib) && JSON.parse(fs.readFileSync(lib, "utf8")).meetings["N-1"]); i++) await v.waitForTimeout(250);
+  const after = JSON.parse(fs.readFileSync(lib, "utf8"));
+  assert.deepEqual(Object.keys(after.meetings).sort(), ["K-1", "N-1"], "library.json now holds both");
+  console.log("library safety: an empty or unimported library never replaced library.json; importing the folder merged both");
+  await run.close();
+}
+
 // --- moving the library to another computer: Export, then Import there ----------------------
 {
   const run = await launch();

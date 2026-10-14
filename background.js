@@ -149,12 +149,13 @@ migrateFiles();
 //
 // Downloads/Meeting Transcripts/library.json holds every meeting (title, participants, every
 // line with speaker and time) and your settings, rewritten a few seconds after anything
-// changes. Removing the extension clears Chrome's copy; "Sync" (connecting the folder) in the
-// transcripts page reads this file (and the .docx files) back.
+// changes. Removing the extension clears Chrome's copy; Import in the transcripts page reads
+// this file (and the .docx files) back.
 //
 // A fresh install must not overwrite a good library.json with a nearly empty library: until
-// the history is restored (or you choose to start fresh, "libraryReady"), it writes
-// "library (since reinstall).json" instead. Restore reads both and then keeps one.
+// the history is imported (or you choose to start fresh, "libraryReady"), it writes
+// "library (since reinstall).json" instead. Import reads both and then keeps one. A library
+// with no calls is never written at all: it has nothing to keep, and must not replace one.
 
 const LIBRARY_FILE = FOLDER + "/library.json";
 const INTERIM_FILE = FOLDER + "/library (since reinstall).json";
@@ -163,7 +164,7 @@ let libraryTimer = null;
 
 async function writeLibraryFile() {
   const all = await chrome.storage.local.get(null);
-  if (!all.libraryReady && !Object.keys(all.meetings || {}).length) return; // nothing to keep yet
+  if (!Object.keys(all.meetings || {}).length) return; // nothing to keep, and never an empty library over a full one
   const filename = all.libraryReady ? LIBRARY_FILE : INTERIM_FILE;
   const idKey = all.libraryReady ? "libraryDownloadId" : "interimDownloadId";
   const settings = Object.fromEntries(BACKED_UP.filter((k) => all.settings && k in all.settings).map((k) => [k, all.settings[k]]));
@@ -240,19 +241,32 @@ function scheduleLibraryWrite(recording) {
 // library.json. That's gone (Export and Import in the library replace it): forget its state, so
 // library.json is written again; a devices/ file can still be imported.
 chrome.storage.local.get("sync").then(({ sync }) => {
-  if (sync) chrome.storage.local.remove(["sync", "deleted", "deviceFileDownloadId"])
-    .then(() => chrome.storage.local.set({ libraryReady: true })).then(() => scheduleLibraryWrite(false));
+  if (sync) chrome.storage.local.remove(["sync", "deleted", "deviceFileDownloadId"]).then(settleLibraryReady)
+    .then(() => scheduleLibraryWrite(false));
 });
 
-// An existing library (an update, or a reload of this version) is ready to be written out.
-chrome.storage.local.get(["meetings", "libraryReady"]).then(({ meetings, libraryReady }) => {
-  if (libraryReady === undefined && meetings && Object.keys(meetings).length) chrome.storage.local.set({ libraryReady: true });
-});
+// Whether this install may write library.json. A fresh install says no (libraryReady false)
+// until you import or start fresh. Installs from before that flag existed (undefined) may, if
+// they've written library.json themselves or there's none in the folder; not when there's one
+// they didn't write, which is someone's history waiting to be imported.
+async function settleLibraryReady() {
+  const all = await chrome.storage.local.get(["meetings", "libraryReady", "libraryDownloadId"]);
+  if (all.libraryReady !== undefined || !Object.keys(all.meetings || {}).length) return;
+  if (!all.libraryDownloadId) {
+    const theirs = await chrome.downloads.search({ filenameRegex: "Meeting Transcripts[\\\\/]library\\.json$", exists: true }).catch(() => []);
+    if (theirs.length) return chrome.storage.local.set({ libraryReady: false });
+  }
+  await chrome.storage.local.set({ libraryReady: true });
+}
+settleLibraryReady();
 
-// After a fresh install, open the transcripts page so a previous library can be restored.
-chrome.runtime.onInstalled.addListener(({ reason }) => {
-  if (reason === "install") chrome.tabs.create({ url: chrome.runtime.getURL("viewer/viewer.html#welcome") });
-  if (reason === "update") chrome.storage.local.set({ libraryReady: true });
+// After a fresh install, open the transcripts page so a previous library can be imported. An
+// update keeps whatever the library was; it doesn't make an unimported one "ready".
+chrome.runtime.onInstalled.addListener(async ({ reason }) => {
+  if (reason !== "install") return;
+  const { libraryReady } = await chrome.storage.local.get("libraryReady");
+  if (libraryReady === undefined) await chrome.storage.local.set({ libraryReady: false });
+  chrome.tabs.create({ url: chrome.runtime.getURL("viewer/viewer.html#welcome") });
 });
 
 chrome.alarms.onAlarm.addListener((alarm) => {

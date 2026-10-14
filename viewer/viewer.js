@@ -362,11 +362,28 @@ function bindActions() {
     });
   });
 
-  // Import: library.json (after a reinstall), a library exported on another computer, or .docx.
-  $("importBtn").addEventListener("click", () => { $("importBtn").classList.remove("pulse"); $("importInput").click(); });
-  $("importInput").addEventListener("change", async (e) => {
-    const picked = [...e.target.files];
-    e.target.value = "";
+  // Import: the Meeting Transcripts folder (library.json and every .docx in its day folders),
+  // or files: a library exported on another computer, a library.json, .docx.
+  const importMenu = (open) => {
+    $("importMenu").classList.toggle("open", open);
+    $("importBtn").setAttribute("aria-expanded", String(open));
+  };
+  $("importBtn").addEventListener("click", (e) => {
+    e.stopPropagation();
+    $("importBtn").classList.remove("pulse");
+    importMenu(!$("importMenu").classList.contains("open"));
+  });
+  document.addEventListener("click", () => importMenu(false));
+  document.addEventListener("keydown", (e) => { if (e.key === "Escape") importMenu(false); });
+  $("importMenu").addEventListener("click", (e) => {
+    const kind = e.target.closest("button")?.dataset.import;
+    importMenu(false);
+    if (kind) $(kind === "folder" ? "importFolder" : "importInput").click();
+  });
+  const importPicked = async (input) => {
+    const picked = [...input.files];
+    input.value = "";
+    if (!picked.length) return;
     const btn = $("importBtn");
     btn.disabled = true;
     const result = await restoreFrom(picked, (text) => (btn.lastChild.textContent = ` ${text}`));
@@ -375,7 +392,9 @@ function bindActions() {
     libIndex = null;
     await loadLibrary();
     toast(result);
-  });
+  };
+  $("importFolder").addEventListener("change", (e) => importPicked(e.target));
+  $("importInput").addEventListener("change", (e) => importPicked(e.target));
 
   // Export: the whole library as one file, named after this computer, to import elsewhere.
   $("libExport").addEventListener("click", async () => {
@@ -488,7 +507,9 @@ async function restoreFrom(picked, progress) {
     }
   }
   if (!libs.length && !docs.length) return "No library or Word files to import there";
-  await chrome.storage.local.set({ libraryReady: true }); // from now on, keep library.json up to date
+  // From now on, keep library.json up to date: once there's a library to keep. Importing nothing
+  // (an empty or wrong file) mustn't let an empty library replace one waiting in the folder.
+  if (added || libs.some((l) => !l.device && l.meetings.length)) await chrome.storage.local.set({ libraryReady: true });
   return [`Imported ${added} call${added === 1 ? "" : "s"}`, settingsRestored && "settings",
     already && `${already} already here`, failed && `${failed} couldn't be read`].filter(Boolean).join(" · ");
 }
