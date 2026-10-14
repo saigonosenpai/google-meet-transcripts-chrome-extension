@@ -64,8 +64,17 @@ function render() {
     : current.captionHint + " The transcript comes from the call's live captions.";
 }
 
+// The meetings and their saved-file records (f:<id>), without loading every transcript.
+async function libraryRecords() {
+  const base = await chrome.storage.local.get(["meetings", "libraryDownloadId", "deviceFileDownloadId", "librarySavedAt", "sync"]);
+  // With sync on, the backup is this device's file in devices/, instead of library.json.
+  base.backupId = base.sync && base.sync.on ? base.deviceFileDownloadId : base.libraryDownloadId;
+  const files = await chrome.storage.local.get(Object.keys(base.meetings || {}).map((id) => "f:" + id));
+  return { ...base, ...files };
+}
+
 async function fileRecords() {
-  const all = await chrome.storage.local.get(null);
+  const all = await libraryRecords();
   return Object.entries(all).filter(([k]) => k.startsWith("f:")).map(([, v]) => v);
 }
 
@@ -105,18 +114,18 @@ function ago(ts) {
 }
 
 async function renderStats() {
-  const all = await chrome.storage.local.get(null);
+  const all = await libraryRecords();
   const meetings = Object.values(all.meetings || {});
   $("calls").textContent = meetings.length;
   $("recorded").textContent = hours(meetings.reduce((t, m) => t + Math.max(0, (m.endedAt || m.startedAt) - m.startedAt), 0));
 
   // What's actually on disk: the saved documents that still exist, plus library.json.
   const ids = Object.entries(all).filter(([k, f]) => k.startsWith("f:") && f && f.downloadId).map(([, f]) => f.downloadId);
-  if (all.libraryDownloadId) ids.push(all.libraryDownloadId);
+  if (all.backupId) ids.push(all.backupId);
   const items = (await Promise.all(ids.map((id) => chrome.downloads.search({ id }).catch(() => [])))).flat()
     .filter((i) => i && i.exists && i.state === "complete");
   $("size").textContent = bytes(items.reduce((t, i) => t + (i.fileSize > 0 ? i.fileSize : i.totalBytes > 0 ? i.totalBytes : 0), 0));
-  const docs = items.filter((i) => i.id !== all.libraryDownloadId).length;
+  const docs = items.filter((i) => i.id !== all.backupId).length;
 
   const counts = Object.entries(MT.PLATFORMS)
     .map(([id, p]) => [p.short, meetings.filter((m) => MT.platformOf(m) === id).length])
@@ -124,7 +133,7 @@ async function renderStats() {
   const parts = [];
   if (counts.length) parts.push(counts.join(" · "));
   parts.push(`${docs} Word document${docs === 1 ? "" : "s"}`);
-  if (all.librarySavedAt && items.some((i) => i.id === all.libraryDownloadId)) parts.push(`backup saved ${ago(all.librarySavedAt)}`);
+  if (all.librarySavedAt && items.some((i) => i.id === all.backupId)) parts.push(`backup saved ${ago(all.librarySavedAt)}`);
   $("statsDetail").textContent = meetings.length ? parts.join(" · ") + "." : "";
 }
 
@@ -177,6 +186,9 @@ async function init() {
   renderStats();
   await refresh();
   setInterval(refresh, 2000);
+  // Calls from your other devices, if sync is on and Chrome already allows reading the folder
+  // (asking needs a click, which the library page's Sync button offers).
+  SYNC.syncNow().then(() => renderStats()).catch(() => {});
 }
 
 init();

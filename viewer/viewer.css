@@ -274,3 +274,33 @@ mark { background: var(--hit); color: inherit; border-radius: 0.1875rem; padding
 .empty-state b { color: var(--label); font-weight: 600; }
 .empty-state .path { white-space: nowrap; }
 #importBtn.pulse { box-shadow: 0 0 0 3px var(--accent-soft); }
+
+/* Sync across devices: the sidebar button shows the state; the dialog sets it up. */
+.sidebar-foot { display: grid; grid-template-columns: minmax(0, 1fr); gap: 0.375rem; }
+.sidebar-foot .btn { min-width: 0; }
+#syncBtn.attention { box-shadow: 0 0 0 3px var(--accent-soft); color: var(--accent); }
+#syncLabel { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+dialog#syncDialog {
+  width: min(28rem, calc(100vw - 2rem)); padding: 1.25rem; border: 0; border-radius: 0.875rem;
+  background: var(--popover); color: var(--label); box-shadow: var(--shadow);
+}
+dialog#syncDialog::backdrop { background: rgba(0, 0, 0, 0.32); }
+.sync h2 { margin: 0 0 0.5rem; font-size: 1.0625rem; font-weight: 700; letter-spacing: -0.01em; }
+.sync p, .sync ol { margin: 0 0 0.75rem; font-size: 0.875rem; line-height: 1.45; color: var(--secondary); }
+.sync ol { padding-left: 1.25rem; }
+.sync li + li { margin-top: 0.375rem; }
+.sync b, .sync #syncStatus { color: var(--label); }
+.sync a { color: var(--accent); }
+.sync .path { white-space: nowrap; color: var(--label); }
+.sync .field { display: grid; gap: 0.25rem; margin-bottom: 0.75rem; font-size: 0.8125rem; color: var(--secondary); }
+.sync .field input {
+  height: 2rem; padding: 0 0.625rem; border: 0; border-radius: 0.5rem; outline: none;
+  background: var(--fill); color: var(--label); font: inherit; font-size: 0.875rem;
+}
+.sync .field input:focus { box-shadow: 0 0 0 3px var(--accent-soft); }
+.sync .err { margin: 0 0 0.75rem; color: var(--danger); font-size: 0.8125rem; }
+.sync .actions { display: flex; justify-content: flex-end; gap: 0.5rem; }
+.sync .actions .btn { width: auto; justify-content: center; padding: 0 0.875rem; border-radius: 0.5rem; }
+.sync .actions #syncOffBtn { margin-right: auto; color: var(--danger); }
+.sync .btn.primary { background: var(--accent); color: #fff; }
+.sync .btn.primary:hover { filter: brightness(1.08); }

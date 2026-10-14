@@ -24,6 +24,10 @@
       <span id="welcomeChoice" hidden><br><button id="startFresh" class="btn link">Start a new library instead</button></span>
     </div>
     <div class="sidebar-foot">
+      <button id="syncBtn" class="btn" title="Keep this library in step with your other computers">
+        <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M13 6.5A5 5 0 0 0 3.6 5M3 9.5A5 5 0 0 0 12.4 11M3.5 2.5V5H6M12.5 13.5V11H10"/></svg>
+        <span id="syncLabel">Sync across devices…</span>
+      </button>
       <button id="importBtn" class="btn" title="Rebuild transcripts and settings from your Meeting Transcripts folder">
         <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 2v8m0 0-3-3m3 3 3-3M3 11v1.5a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1V11"/></svg>
         Restore from folder…
@@ -93,9 +97,37 @@
   </main>
 
   <div id="toast" role="status" aria-live="polite"><span id="toastText"></span><button id="toastAction" hidden></button></div>
+  <dialog id="syncDialog" aria-labelledby="syncTitle">
+    <form method="dialog" class="sync">
+      <h2 id="syncTitle">Sync across devices</h2>
+      <div id="syncOff">
+        <p>Your calls from every computer, in one library. The extension still never connects
+          to anything: your cloud app (Google Drive, OneDrive, Dropbox or iCloud) moves the files.</p>
+        <ol>
+          <li>On each computer, make <span class="path">Downloads › Meeting Transcripts</span> a folder
+            your cloud app syncs. <a href="https://github.com/saigonosenpai/meet-transcripts-chrome-extension#sync-across-devices" target="_blank" rel="noopener">How, for each app</a></li>
+          <li>Name this computer, then choose that folder. Chrome asks to let the extension read it:
+            pick <b>Allow on every visit</b>.</li>
+        </ol>
+      </div>
+      <div id="syncOn" hidden>
+        <p id="syncStatus"></p>
+      </div>
+      <label class="field">This computer <input id="deviceName" type="text" maxlength="40" autocomplete="off"></label>
+      <p id="syncError" class="err" hidden></p>
+      <div class="actions">
+        <button id="syncOffBtn" type="button" class="btn" hidden>Turn off</button>
+        <button value="close" class="btn">Close</button>
+        <button id="syncNowBtn" type="button" class="btn primary" hidden>Sync now</button>
+        <button id="syncPick" type="button" class="btn primary">Choose folder…</button>
+      </div>
+    </form>
+  </dialog>
+
   <script src="../lib/shared.js"></script>
   <script src="../lib/docx.js"></script>
   <script src="../lib/docximport.js"></script>
+  <script src="../lib/sync.js"></script>
   <script src="viewer.js"></script>
 </body>
 </html>

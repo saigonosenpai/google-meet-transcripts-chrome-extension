@@ -159,6 +159,9 @@ async function renderFile() {
     html += `<span class="doc" title="${esc(f.filename)}">${DOC_ICON}<span>Saved as <b>${esc(name)}</b></span></span>` +
       `<span class="sep">·</span><span>${esc(savedWhen(f.savedAt))}</span>` +
       `<button id="showFile" class="btn link">Show in folder</button>`;
+  } else if (current.syncedFrom) {
+    html += `<span class="doc" title="Its Word document is in your synced Meeting Transcripts folder">${DOC_ICON}` +
+      `<span>Recorded on <b>${esc(current.syncedFrom)}</b></span></span>`;
   } else if (current.importedFrom) {
     html += `<span class="doc" title="${esc(current.importedFrom)}">${DOC_ICON}<span>Restored from <b>${esc(current.importedFrom)}</b></span></span>`;
   } else {
@@ -417,9 +420,11 @@ async function restoreFrom(picked, progress) {
   const isKnown = (meta, title) => meetings.some((m) => m.id === meta.id ||
     (Math.abs(m.startedAt - meta.startedAt) < 120_000 && MT.title(m) === title));
 
-  // library.json, and "library (since reinstall).json" from an install that wasn't restored.
+  // library.json, "library (since reinstall).json" from an install that wasn't restored, and
+  // the devices' files when sync across devices is in use (devices/<id>.json).
   const libs = [];
-  for (const f of picked.filter((f) => /^library.*\.json$/i.test(f.name))) {
+  const isLibrary = (f) => /^library.*\.json$/i.test(f.name) || /(^|[\\/])devices[\\/][^\\/]+\.json$/i.test(f.webkitRelativePath || "");
+  for (const f of picked.filter(isLibrary)) {
     const parsed = DOCX_IMPORT.parseLibrary(await f.text());
     if (parsed) libs.push(parsed);
   }
@@ -458,6 +463,129 @@ async function restoreFrom(picked, progress) {
     already && `${already} already here`, failed && `${failed} couldn't be read`].filter(Boolean).join(" · ");
 }
 
+// --- sync across devices (lib/sync.js) -------------------------------------------------------
+
+async function syncAllowed(folder) {
+  return !!folder && (!folder.queryPermission || (await folder.queryPermission({ mode: "read" })) === "granted");
+}
+
+// The sidebar button says how sync stands: off, on (with whom, when), or waiting for permission.
+async function renderSync() {
+  const sync = await SYNC.state();
+  let label = "Sync across devices…", attention = false;
+  if (sync.on) {
+    if (!(await syncAllowed(await SYNC.getFolder()))) {
+      label = "Allow sync…";
+      attention = true;
+    } else {
+      const n = (sync.devices || []).length;
+      label = n === 1 ? `Synced with ${sync.devices[0]}` : n ? `Synced with ${n} devices` : "Sync on · no other devices yet";
+      if (sync.lastSync) label += " · " + savedWhen(sync.lastSync);
+    }
+  }
+  $("syncLabel").textContent = label;
+  $("syncBtn").classList.toggle("attention", attention);
+  $("syncBtn").title = attention ? "Chrome needs your OK to read the synced folder again" : "Keep this library in step with your other computers";
+}
+
+let syncing = false;
+async function runSync(ask) {
+  if (syncing) return null;
+  syncing = true;
+  try {
+    const r = await SYNC.syncNow({ ask });
+    const n = r.ok ? r.added + r.updated + r.removed : 0;
+    if (n) toast([r.added && `${r.added} new`, r.updated && `${r.updated} updated`, r.removed && `${r.removed} removed`]
+      .filter(Boolean).join(", ") + ` from ${r.devices.join(", ")}`);
+    return r;
+  } catch {
+    return null;
+  } finally {
+    syncing = false;
+    renderSync();
+  }
+}
+
+async function renderSyncDialog() {
+  const sync = await SYNC.state();
+  const on = !!sync.on;
+  $("syncOff").hidden = on;
+  $("syncOn").hidden = !on;
+  $("syncPick").hidden = on;
+  $("syncNowBtn").hidden = !on;
+  $("syncOffBtn").hidden = !on;
+  $("deviceName").value = (await MT.getDevice()).name;
+  if (on) {
+    const devices = sync.devices || [];
+    $("syncStatus").textContent = (devices.length
+      ? `Synced with ${devices.join(", ")}.`
+      : "On. No other computer has synced yet: set it up there too, with the same folder.") +
+      (sync.lastSync ? ` Last checked ${savedWhen(sync.lastSync)}.` : "");
+  }
+}
+
+function bindSync() {
+  const dialog = $("syncDialog"), error = $("syncError");
+  const fail = (msg) => { error.textContent = msg; error.hidden = !msg; };
+  $("syncBtn").addEventListener("click", async () => {
+    const sync = await SYNC.state();
+    // Waiting for permission: this click is the user gesture Chrome needs to ask.
+    if (sync.on && !(await syncAllowed(await SYNC.getFolder())) && (await SYNC.getFolder())) {
+      const r = await runSync(true);
+      if (r && r.ok) return toast(r.devices.length ? `Synced with ${r.devices.join(", ")}` : "Sync on");
+    }
+    fail("");
+    await renderSyncDialog();
+    dialog.showModal();
+  });
+  $("deviceName").addEventListener("change", async (e) => {
+    const name = e.target.value.replace(/\s+/g, " ").trim();
+    if (!name) return renderSyncDialog();
+    await chrome.storage.local.set({ device: { ...(await MT.getDevice()), name } });
+  });
+  $("syncPick").addEventListener("click", async () => {
+    fail("");
+    let folder;
+    try {
+      folder = await window.showDirectoryPicker({ id: "meeting-transcripts", mode: "read", startIn: "downloads" });
+    } catch {
+      return; // cancelled
+    }
+    $("syncPick").disabled = true;
+    try {
+      const r = await SYNC.turnOn(folder);
+      if (!r.ok) {
+        return fail("That isn't the folder this computer saves its transcripts in" +
+          (r.savesTo ? `: pick ${r.savesTo}` : ": pick Downloads › Meeting Transcripts") + ".");
+      }
+      dialog.close();
+      toast(r.devices.length ? `Sync on: ${r.added} calls from ${r.devices.join(", ")}` : "Sync on. Now set it up on your other computer.");
+    } finally {
+      $("syncPick").disabled = false;
+      renderSync();
+    }
+  });
+  $("syncNowBtn").addEventListener("click", async () => {
+    const r = await runSync(true);
+    if (r && !r.ok && r.reason === "permission") fail("Chrome didn't allow reading the folder. Try again, or choose it again.");
+    renderSyncDialog();
+  });
+  $("syncOffBtn").addEventListener("click", async () => {
+    await SYNC.turnOff();
+    dialog.close();
+    toast("Sync off. Calls synced so far stay in this library.");
+    renderSync();
+  });
+  // Sync when the page opens and when you come back to it (at most every 30 s): you use one
+  // computer at a time, so nothing needs to poll in the background. Unchanged files aren't read.
+  let lastFocusSync = 0;
+  window.addEventListener("focus", () => {
+    if (Date.now() - lastFocusSync < 30_000) return;
+    lastFocusSync = Date.now();
+    runSync(false);
+  });
+}
+
 // "#<meeting id>" opens a meeting; "#welcome" (after a fresh install) points at Restore.
 async function route() {
   const id = decodeURIComponent(location.hash.slice(1));
@@ -478,6 +606,9 @@ window.addEventListener("hashchange", route);
 
 (async () => {
   bindActions();
+  bindSync();
   await loadLibrary();
   route();
+  await renderSync();
+  runSync(false);
 })();
