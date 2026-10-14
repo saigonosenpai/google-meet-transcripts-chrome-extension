@@ -1,7 +1,7 @@
 // End-to-end test: loads the extension in Chromium, serves a fake Meet call, and checks
 // the stored transcript and the .docx file it saves to Downloads/Meeting Transcripts. Teams and
 // Zoom run the same way against their own mock pages.
-//   node tests/e2e.mjs [extension dir] [screenshot dir]
+//   node tests/e2e.mjs [extension dir, default: the repo root] [screenshot dir]
 import path from "node:path";
 import fs from "node:fs";
 import os from "node:os";
@@ -11,7 +11,7 @@ import assert from "node:assert/strict";
 
 import { chromium } from "playwright";
 
-const ext = path.resolve(process.argv[2] || new URL("../extension", import.meta.url).pathname);
+const ext = path.resolve(process.argv[2] || new URL("..", import.meta.url).pathname);
 const shots = process.argv[3] || ".";
 const fixture = (name) => fs.readFileSync(new URL("./fixtures/" + name, import.meta.url), "utf8");
 const mock = fixture("mock-meet.html");

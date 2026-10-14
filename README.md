@@ -1,5 +1,11 @@
 # Meeting Transcripts
 
+[![Download meeting-transcripts.zip](https://img.shields.io/badge/Download-meeting--transcripts.zip-2ea44f?style=for-the-badge&logo=googlechrome&logoColor=white)](https://github.com/saigonosenpai/meet-transcripts-chrome-extension/releases/latest/download/meeting-transcripts.zip)
+&nbsp; then follow the [install steps](#install) below.
+
+> GitHub's green **Code › Download ZIP** works too. The button above is just smaller (only the
+> extension, no source files) and always the latest release.
+
 **Turn every Google Meet, Microsoft Teams and Zoom call into a searchable transcript and a
 Word document, automatically.**
 
@@ -23,7 +29,8 @@ The extension isn't on the Chrome Web Store, so you add it to Chrome yourself. I
 about two minutes and works the same on Windows and Mac.
 
 **1. Download** [**meeting-transcripts.zip**](https://github.com/saigonosenpai/meet-transcripts-chrome-extension/releases/latest/download/meeting-transcripts.zip)
-(always the latest version).
+(always the latest version). GitHub's green **Code › Download ZIP** button works as well:
+it's the full source code, which loads the same way.
 
 **2. Unzip it into a permanent place.** Chrome runs the extension from this folder, so put
 it somewhere you won't clean up, and don't delete it later.
@@ -63,14 +70,14 @@ If you've used the extension before, click **Restore from folder…** on that ta
 
 > **"Manifest file is missing or unreadable"?** The folder you selected doesn't contain
 > `manifest.json` itself; usually it's one level too high (for example `Downloads`, or a
-> folder holding another `meeting-transcripts` folder). Click **Load unpacked** again and
-> pick the folder that has `manifest.json` in it.
+> folder holding another folder of the same name, which Windows' *Extract All* creates for
+> GitHub's Code › Download ZIP). Click **Load unpacked** again and pick the folder that has
+> `manifest.json` in it.
 >
 > Chrome may also show a *"Disable developer mode extensions"* notice when it starts.
 > That's normal for extensions added this way; close it with the ✕ (not *Disable*).
 
-If you use git, you can instead clone this repository and select its `extension` folder
-in step 4.
+If you use git, you can instead clone this repository and select the cloned folder in step 4.
 
 ## Contents
 
@@ -400,6 +407,8 @@ folder to the new computer's Downloads and use **Restore from folder…**.
 **"Manifest file is missing or unreadable" when loading it.** You selected a folder that
 doesn't directly contain `manifest.json`, usually the one above it. Select the
 `meeting-transcripts` folder that has `manifest.json` inside (see [Install](#install), step 4).
+With GitHub's Code › Download ZIP on Windows, that's the inner
+`meet-transcripts-chrome-extension-main` folder, inside the one of the same name.
 
 **The badge says `CC` and nothing is recorded.** Captions are off. Click the pill in the
 call, or turn captions on yourself: **c** or the CC button in Meet, **More › Language and
@@ -443,31 +452,30 @@ What changed in each version is in [CHANGELOG.md](CHANGELOG.md) and on the
 
 No build step and no dependencies: plain Manifest V3 JavaScript. The manifest has a fixed
 `key`, so the extension ID (`kddloncdbcaidcdjcjpehapfbgnmicne`) and its stored data stay
-the same wherever the folder lives. If you cloned the repo, load the **`extension`** folder
-with **Load unpacked**.
+the same wherever the folder lives. The repository itself is the extension: load the cloned
+folder with **Load unpacked**. (Chrome ignores the tests and docs alongside it.)
 
 ```
-extension/                 the Chrome extension (this is what the release zip contains)
-  manifest.json
-  background.js            toolbar badge; saves each call's .docx and library.json
-  content/
-    recorder.js            captions → transcript, gaps, the in-call pill, saving
-    dom.js                 small DOM helpers for the platform adapters
-    platforms/             what's specific to each platform: where the captions are,
-      meet.js              who's speaking, the meeting title, how to turn captions on,
-      teams.js             and whether you're still in the call
-      zoom.js
-  lib/
-    shared.js              storage layout, grouping, file naming, the document layout
-    docx.js                tiny dependency-free .docx writer
-    docximport.js          reads saved .docx files and library.json back in, for Restore
-  popup/                   the toolbar popup
-  viewer/                  the transcript library and reader
-  icons/
+manifest.json              the extension: these files and folders are what the release zip holds
+background.js              toolbar badge; saves each call's .docx and library.json
+content/
+  recorder.js              captions → transcript, gaps, the in-call pill, saving
+  dom.js                   small DOM helpers for the platform adapters
+  platforms/               what's specific to each platform: where the captions are,
+    meet.js                who's speaking, the meeting title, how to turn captions on,
+    teams.js               and whether you're still in the call
+    zoom.js
+lib/
+  shared.js                storage layout, grouping, file naming, the document layout
+  docx.js                  tiny dependency-free .docx writer
+  docximport.js            reads saved .docx files and library.json back in, for Restore
+popup/                     the toolbar popup
+viewer/                    the transcript library and reader
+icons/
 tests/
   e2e.mjs                  end-to-end test in a real Chromium
   fixtures/                pages that imitate Google Meet, Teams and Zoom
-docs/screenshots/          images used in this README
+docs/screenshots/          images used in this README; docs/INSTALL.txt goes in the zip
 .github/workflows/         automatic releases
 CHANGELOG.md               what changed in each version (becomes the release notes)
 ```
@@ -487,17 +495,17 @@ turning a platform off, the "ask where to save" warning, a full wipe-and-restore
 
 ```bash
 npm i -D playwright                  # or use a global install
-node tests/e2e.mjs extension /tmp    # screenshots and a copy of the saved .docx land in /tmp
+node tests/e2e.mjs . /tmp            # screenshots and a copy of the saved .docx land in /tmp
 ```
 
 ### Releasing
 
 Releases are automatic. `.github/workflows/release.yml` runs on every push to `main`: if the
-`version` in `extension/manifest.json` has no release yet, it runs the end-to-end test, zips the
-extension (without tests and screenshots), and publishes release `v<version>` with that
+`version` in `manifest.json` has no release yet, it zips the extension (without tests and
+screenshots), runs the end-to-end test on exactly what's in the zip, and publishes release `v<version>` with that
 version's section of `CHANGELOG.md` as the notes. To ship an update:
 
-1. Bump `version` in `extension/manifest.json` (e.g. `2.0.0` → `2.1.0`).
+1. Bump `version` in `manifest.json` (e.g. `2.0.0` → `2.1.0`).
 2. Add a `## 2.1.0` section at the top of `CHANGELOG.md`.
 3. Push to `main`.
 

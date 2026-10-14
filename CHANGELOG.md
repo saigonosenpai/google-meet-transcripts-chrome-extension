@@ -1,7 +1,7 @@
 # Changelog
 
 Each version here becomes a release on GitHub, with the extension zip attached, as soon as
-it's pushed to `main` with the matching `version` in `extension/manifest.json`.
+it's pushed to `main` with the matching `version` in `manifest.json`.
 
 ## 2.2.3
 
