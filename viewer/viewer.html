@@ -18,22 +18,28 @@
     <div id="emptyLib" class="empty-state" hidden>
       <strong>No transcripts yet</strong>
       Join a Google Meet, Microsoft Teams or Zoom call in Chrome with captions on, and it shows up here as you talk.
-      Used it before, or on another computer? Click <b>Import</b> below and pick
-      <span class="path">library.json</span> from <span class="path">Downloads › Meeting Transcripts</span>
-      (or <span class="path">Meet Transcripts</span> from older versions), or a library you exported,
-      to bring back your history.
+      Used it before, or on another computer? Click <b>Import</b> below and choose your
+      <span class="path">Downloads › Meeting Transcripts</span> folder (or <span class="path">Meet Transcripts</span>
+      from older versions), or a library you exported, to bring back your history.
       <span id="welcomeChoice" hidden><br><button id="startFresh" class="btn link">Start a new library instead</button></span>
     </div>
     <div class="sidebar-foot">
-      <button id="importBtn" class="btn" title="Add calls from a library file: library.json after a reinstall, or a library exported on another computer (or Word documents)">
-        <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 2v8m0 0-3-3m3 3 3-3M3 11v1.5a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1V11"/></svg>
-        Import…
-      </button>
+      <div class="import-wrap">
+        <button id="importBtn" class="btn" aria-haspopup="menu" aria-expanded="false" title="Add calls: your Meeting Transcripts folder (library.json and Word documents), or a library exported on another computer">
+          <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 2v8m0 0-3-3m3 3 3-3M3 11v1.5a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1V11"/></svg>
+          Import…
+        </button>
+        <div id="importMenu" class="popover up" role="menu">
+          <button data-import="folder" role="menuitem">Meeting Transcripts folder…<span>library.json, .docx</span></button>
+          <button data-import="files" role="menuitem">File…<span>an export, .json, .docx</span></button>
+        </div>
+      </div>
       <button id="libExport" class="btn" title="Save your whole library as one file, to import on another computer">
         <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 10V2m0 0L5 5m3-3 3 3M3 11v1.5a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1V11"/></svg>
         Export
       </button>
       <input id="importInput" type="file" accept=".json,.docx" multiple hidden>
+      <input id="importFolder" type="file" webkitdirectory multiple hidden>
     </div>
   </aside>
 
