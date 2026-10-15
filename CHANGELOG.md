@@ -3,6 +3,23 @@
 Each version here becomes a release on GitHub, with the extension zip attached, as soon as
 it's pushed to `main` with the matching `version` in `manifest.json`.
 
+## 2.6.0
+
+- **Hide captions on screen now hides the caption strip too.** Captions still have to be
+  on (they're what gets recorded), but with this switch on they're moved out of the way
+  completely: the empty strip they left at the bottom of the call is gone and the video
+  is enlarged into the space, on any screen size. Turn the switch off and the captions
+  come back where they were.
+- **Hide captions on screen is on by default**, and updating to 2.6.0 switches it on once
+  for everyone, since it now gives the video the space back. Turn it off in the popup or
+  from the call.
+- **Show or hide captions from the call.** The in-call pill has a *Show captions* /
+  *Hide captions* button, the same switch as in the popup.
+- **The popup shows the installed version** in its top-right corner, and the tagline gets a 😉.
+- **Copy a report** now also describes the layout around the captions (sizes and
+  structure, never what was said), to fix this quickly if a call page lays out
+  differently.
+
 ## 2.5.2
 
 - **Fixed: `library.json` could be replaced by an empty library.** After the extension was
