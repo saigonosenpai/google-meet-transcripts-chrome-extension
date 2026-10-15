@@ -3,6 +3,13 @@
 Each version here becomes a release on GitHub, with the extension zip attached, as soon as
 it's pushed to `main` with the matching `version` in `manifest.json`.
 
+## 2.6.2
+
+- **The download is now called `meet-transcripts-chrome-extension.zip`**, so the
+  extension's folder can't be mixed up with the *Meeting Transcripts* folder where your
+  calls are saved. Each release also has it with the version in its name, and the old
+  `meeting-transcripts.zip` link keeps working.
+
 ## 2.6.1
 
 - **Popup:** the notes under each section are a little smaller.
