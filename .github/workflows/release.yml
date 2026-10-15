@@ -52,11 +52,14 @@ jobs:
           # the release zip holds just the extension, plus the license and install notes.
           # The files sit at the top of the zip, so the folder that unzipping creates (on Windows
           # and Mac alike) is the one to pick in Load unpacked: no inner folder to miss.
-          # A fixed name gives a stable link: releases/latest/download/meeting-transcripts.zip
+          # Two copies: one named with the version, and one with a fixed name for the stable link
+          # releases/latest/download/meeting-transcripts.zip
+          version=$(jq -r .version manifest.json)
           mkdir -p dist/pkg
           cp -r manifest.json background.js content icons lib popup viewer dist/pkg/
           cp LICENSE README.md docs/INSTALL.txt dist/pkg/
           (cd dist/pkg && zip -qr ../meeting-transcripts.zip .)
+          cp dist/meeting-transcripts.zip "dist/meeting-transcripts-$version.zip"
 
       - name: Run the end-to-end test on the zip's contents
         if: steps.version.outputs.new == 'true'
@@ -75,7 +78,7 @@ jobs:
 
           ---
 
-          **Install:** download \`meeting-transcripts.zip\` below and unzip it into a permanent place, such as Documents. Open \`chrome://extensions\`, turn on **Developer mode**, click **Load unpacked** and select the unzipped \`meeting-transcripts\` folder (the one with \`manifest.json\` in it).
+          **Install:** download \`meeting-transcripts-$version.zip\` below (\`meeting-transcripts.zip\` is the same file) and unzip it into a permanent place, such as Documents. Open \`chrome://extensions\`, turn on **Developer mode**, click **Load unpacked** and select the unzipped folder (the one with \`manifest.json\` in it).
 
           **Update:** copy the new files over your existing extension folder, replacing them, then click the reload arrow (↻) on the extension in \`chrome://extensions\`. Don't click Remove.
 
@@ -86,5 +89,5 @@ jobs:
         if: steps.version.outputs.new == 'true'
         run: |
           version=${{ steps.version.outputs.version }}
-          gh release create "v$version" "dist/meeting-transcripts.zip" \
+          gh release create "v$version" "dist/meeting-transcripts-$version.zip" "dist/meeting-transcripts.zip" \
             --title "$(jq -r .name manifest.json) $version" --notes-file notes.md --target "$GITHUB_SHA"
