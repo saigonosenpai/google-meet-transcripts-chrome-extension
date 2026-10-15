@@ -3,6 +3,12 @@
 Each version here becomes a release on GitHub, with the extension zip attached, as soon as
 it's pushed to `main` with the matching `version` in `manifest.json`.
 
+## 2.6.1
+
+- **Popup:** the notes under each section are a little smaller.
+- **Releases** also carry the zip named with its version, such as
+  `meeting-transcripts-2.6.1.zip`.
+
 ## 2.6.0
 
 - **Hide captions on screen now hides the caption strip too.** Captions still have to be
