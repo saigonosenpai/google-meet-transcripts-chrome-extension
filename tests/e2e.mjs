@@ -108,7 +108,11 @@ console.log("renamed:", path.basename(renamed.filename));
 assert.ok(path.basename(renamed.filename).includes("Weekly sync (Q4) - Alice"));
 assert.ok(fs.existsSync(renamed.filename), "new file exists");
 assert.ok(!fs.existsSync(file.filename), "old file removed");
-assert.deepEqual(fs.readdirSync(path.dirname(renamed.filename)), [path.basename(renamed.filename)]);
+// Renaming re-saves on its own and Save was clicked too: let Chrome finish writing before
+// listing the folder (an unfinished download shows as "Unconfirmed ….crdownload").
+const listing = () => fs.readdirSync(path.dirname(renamed.filename));
+for (let i = 0; i < 40 && listing().some((f) => f.endsWith(".crdownload")); i++) await v.waitForTimeout(250);
+assert.deepEqual(listing(), [path.basename(renamed.filename)]);
 await v.screenshot({ path: shots + "/viewer.png" });
 
 // --- delete is immediate and undoable (no blocking confirm dialog) ---------------------------------
@@ -136,6 +140,8 @@ assert.ok((await p.textContent("#lastSaved")).includes("(Q4)"));
 await p.waitForFunction(() => document.getElementById("size").textContent !== "–");
 const stats = await p.evaluate(() => ["calls", "recorded", "size", "statsDetail"].map((id) => document.getElementById(id).textContent));
 console.log("popup stats:", stats.join(" | "));
+const manifestVersion = JSON.parse(fs.readFileSync(path.join(ext, "manifest.json"))).version;
+assert.equal(await p.textContent("#version"), "v" + manifestVersion, "popup shows the installed version");
 assert.equal(stats[0], "1");
 assert.match(stats[2], /^\d+(\.\d)? (KB|MB)$/);
 assert.match(stats[3], /^Meet 1 · 1 Word document/);
@@ -219,6 +225,102 @@ const restored = await v.evaluate(() => MT.getSettings());
 assert.equal(restored.myName, "Sam Lee");
 assert.equal(restored.hideCaptions, true);
 console.log("restored meetings:", titlesAfter.join(" | "));
+
+// --- hiding captions: the caption strip gives its space back, and recording goes on ---------------
+{
+  // "Hide captions on screen" is on (restored above).
+  const hp = await ctx.newPage();
+  await hp.setViewportSize({ width: 1000, height: 700 });
+  await hp.goto("https://meet.google.com/hid-ecap-tns");
+  await hp.waitForFunction(() => window.done, null, { timeout: 30000 });
+  await hp.waitForTimeout(800);
+  // The tile block as seen on screen (after any scaling), and where the controls start.
+  const layout = () => hp.evaluate(() => ({
+    tile: (({ top, bottom, left, right, width, height }) => ({ top, bottom, left, right, width, height }))(document.getElementById("grid").getBoundingClientRect()),
+    stage: document.getElementById("stage").getBoundingClientRect().height,
+    strip: document.getElementById("capbar").getBoundingClientRect().height,
+    captionsLeft: document.querySelector('[role="region"]').getBoundingClientRect().left,
+    controls: document.getElementById("controls").getBoundingClientRect().height,
+  }));
+  // Hidden captions: the tiles fill the space down to 16px above the controls, or the stage's
+  // width if that comes first, centered, and never over the controls.
+  const fits = (l, w, h, what) => {
+    const t = l.tile, floor = h - 80 - 16, near = (a, b) => Math.abs(a - b) <= 2;
+    assert.ok(t.top >= -1, `${what}: tiles stay on screen ${JSON.stringify(t)}`);
+    assert.ok(t.bottom <= floor + 1, `${what}: tiles stay above the controls ${JSON.stringify(t)}`);
+    assert.ok(near(t.bottom, floor) || near(t.width, w - 32), `${what}: tiles fill the space ${JSON.stringify(t)}`);
+    assert.ok(near(t.left - 16, w - 16 - t.right), `${what}: tiles centered ${JSON.stringify(t)}`);
+  };
+  const hidden = await layout();
+  console.log("captions hidden:", JSON.stringify(hidden));
+  assert.equal(hidden.strip, 0, "caption strip collapsed");
+  fits(hidden, 1000, 700, "1000×700");
+  assert.ok(hidden.tile.height > 500, "tiles grew from 440px: " + hidden.tile.height);
+  assert.equal(hidden.controls, 80, "controls untouched");
+  assert.ok(hidden.captionsLeft < -5000, "captions moved off-screen");
+  const recordedLines = () => sw.evaluate(async () => {
+    const m = Object.values((await chrome.storage.local.get("meetings")).meetings || {}).find((x) => x.code === "hid-ecap-tns");
+    return m ? (await chrome.storage.local.get("t:" + m.id))["t:" + m.id] || [] : [];
+  });
+  let lines = [];
+  for (let i = 0; i < 40 && !lines.some((e) => e.text.includes("Great, thanks everyone.")); i++) {
+    lines = await recordedLines();
+    await hp.waitForTimeout(250);
+  }
+  assert.ok(lines.some((e) => e.text.includes("Great, thanks everyone.")), "still recording while hidden");
+  // Any screen size, and resizing mid-call (Meet re-sets its own offset when the window resizes).
+  await hp.evaluate(() => addEventListener("resize", layoutStage));
+  for (const [w, h] of [[1366, 768], [1920, 1080], [2560, 1440], [1280, 720]]) {
+    await hp.setViewportSize({ width: w, height: h });
+    await hp.waitForTimeout(500);
+    const l = await layout();
+    assert.equal(l.strip, 0, `strip collapsed at ${w}×${h}`);
+    fits(l, w, h, `${w}×${h}`);
+  }
+  await hp.setViewportSize({ width: 1000, height: 700 });
+  await hp.waitForTimeout(500);
+  console.log("hide captions: tiles fit at 1366×768, 1920×1080, 2560×1440, 1280×720 and when resized");
+  // "Copy a report" includes the layout around the captions, never what was said.
+  const report = await sw.evaluate(async () => {
+    const [tab] = await chrome.tabs.query({ url: "https://meet.google.com/hid-ecap-tns" });
+    return chrome.tabs.sendMessage(tab.id, { type: "diagnose" });
+  });
+  console.log("caption layout report:\n" + report.captionLayout);
+  assert.match(report.captionLayout, /COLLAPSED/);
+  assert.match(report.captionLayout, /stage fit: main#stage/);
+  assert.match(report.captionLayout, /call layout:[\s\S]*main#stage/);
+  assert.match(report.captionLayout, /stage path:\n  video [\s\S]*main#stage[^\n]*bottom/);
+  assert.ok(!/launch|Friday|thanks/i.test(JSON.stringify(report)), "no caption text in the report");
+  // The in-call pill has a switch for it. The pill is in a closed shadow root, which only the
+  // DevTools protocol reaches: find its "Show captions" button there and click it.
+  const cdp = await hp.context().newCDPSession(hp);
+  const pillButton = async () => {
+    const { root } = await cdp.send("DOM.getDocument", { depth: -1, pierce: true });
+    const cls = (n) => { const a = n.attributes || []; const i = a.indexOf("class"); return i >= 0 && i % 2 === 0 ? a[i + 1] : ""; };
+    const find = (n) => n.nodeName === "BUTTON" && cls(n) === "cc" ? n
+      : [...(n.children || []), ...(n.shadowRoots || [])].map(find).find(Boolean);
+    const { object } = await cdp.send("DOM.resolveNode", { nodeId: find(root).nodeId });
+    return object.objectId;
+  };
+  const pillCall = async (fn) => (await cdp.send("Runtime.callFunctionOn",
+    { objectId: await pillButton(), functionDeclaration: fn, returnByValue: true })).result.value;
+  assert.equal(await pillCall("function () { return this.textContent; }"), "Show captions");
+  // Clicking it brings the strip back.
+  await pillCall("function () { this.click(); }");
+  await hp.waitForTimeout(600);
+  assert.equal((await sw.evaluate(() => MT.getSettings())).hideCaptions, false, "pill switch turns hiding off");
+  assert.equal(await pillCall("function () { return this.textContent; }"), "Hide captions");
+  const shown = await layout();
+  assert.ok(shown.strip >= 140 && shown.captionsLeft >= 0 && Math.round(shown.tile.height) === 440, "strip back, tiles as Meet laid them out: " + JSON.stringify(shown));
+  await pillCall("function () { this.click(); }");
+  await hp.waitForTimeout(600);
+  // Now with a strip full of captions (taller than when the call began): still collapsed.
+  const again = await layout();
+  assert.equal(again.strip, 0, "collapsed again");
+  fits(again, 1000, 700, "hidden again");
+  await hp.close();
+  console.log("hide captions: tiles", Math.round(hidden.tile.width) + "×" + Math.round(hidden.tile.height), "(from 782×440), still recording; off again:", shown.strip, "px strip");
+}
 
 // --- Microsoft Teams ------------------------------------------------------------------------------
 await v.evaluate(() => MT.saveSettings({ hideCaptions: false }));

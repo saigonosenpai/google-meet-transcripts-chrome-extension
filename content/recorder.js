@@ -276,24 +276,212 @@
   function attach(el) {
     if (observer) observer.disconnect();
     region = el;
+    applyHide(); // also undoes it for a caption area that's gone
     if (!el) return;
-    applyHide();
     let pending = false;
     observer = new MutationObserver(() => {
       if (pending) return;
       pending = true;
-      setTimeout(() => { pending = false; scan(); }, 250);
+      setTimeout(() => { pending = false; applyHide(); scan(); }, 250); // the page may re-render around the captions
     });
     observer.observe(el, { childList: true, subtree: true, characterData: true });
     ensureSession().then(scan);
   }
 
+  // Hiding captions: the caption area is lifted out of the page (fixed, off-screen, invisible)
+  // rather than display:none, so the page keeps rendering text we can read. The containers
+  // it leaves empty are collapsed, and the page is told the window resized, so the call
+  // recalculates its video layout into the space (Meet sizes its tiles by script). A
+  // container is only collapsed while it holds no video, no participant tile, none of the
+  // call's controls and no more than a third of the window: never the call layout itself.
+  const HIDE_CSS = `
+    .mt-hidden-captions { position: fixed !important; left: -10000px !important; top: 0 !important;
+      width: var(--mt-width, 40rem) !important; max-height: none !important; opacity: 0 !important; pointer-events: none !important; }
+    .mt-collapsed { height: 0 !important; min-height: 0 !important; max-height: 0 !important; flex: 0 0 0 !important;
+      padding-top: 0 !important; padding-bottom: 0 !important; margin-top: 0 !important; margin-bottom: 0 !important;
+      border-width: 0 !important; overflow: hidden !important; }`;
+  let collapsed = [];
+  // The call's own controls: a container holding any of these is part of the control bar.
+  const CONTROLS = ['microphone', 'camera', 'leave', 'hang up', 'end call', 'turn on captions', 'turn off captions',
+    'turn on live captions', 'turn off live captions'].map((l) => `button[aria-label*="${l}" i]`).join(", ");
+
+  function collapsible(el) {
+    if (!el || el === document.body || el === document.documentElement) return false;
+    if (el.querySelector("video, [data-participant-id]")) return false;
+    if (el.querySelector(CONTROLS)) return false;
+    const r = el.getBoundingClientRect();
+    return r.height <= window.innerHeight / 3 || el.classList.contains("mt-collapsed");
+  }
+
   function applyHide() {
-    if (!region) return;
-    // Opacity (not display:none) so the page keeps rendering text we can read.
-    const hide = settings.hideCaptions && enabled();
-    region.style.opacity = hide ? "0" : "";
-    region.style.pointerEvents = hide ? "none" : "";
+    const hide = !!region && settings.hideCaptions && enabled();
+    if (hide && !document.getElementById("mt-hide-css")) {
+      const style = document.createElement("style");
+      style.id = "mt-hide-css";
+      style.textContent = HIDE_CSS;
+      (document.head || document.documentElement).append(style);
+    }
+    document.querySelectorAll(".mt-hidden-captions").forEach((el) => { if (el !== region || !hide) el.classList.remove("mt-hidden-captions"); });
+    // Lift the captions out first, so the containers are measured without them.
+    if (hide && !region.classList.contains("mt-hidden-captions")) {
+      region.style.setProperty("--mt-width", Math.max(320, region.getBoundingClientRect().width) + "px");
+      region.classList.add("mt-hidden-captions");
+    }
+    const chain = [];
+    if (hide) for (let el = region.parentElement, i = 0; i < 6 && collapsible(el); el = el.parentElement, i++) chain.push(el);
+    const changed = chain.length !== collapsed.length || chain.some((el, i) => el !== collapsed[i]);
+    for (const el of collapsed) if (!chain.includes(el)) el.classList.remove("mt-collapsed");
+    for (const el of chain) el.classList.add("mt-collapsed");
+    collapsed = chain;
+    const refit = fitStage(hide);
+    if (changed || refit) window.dispatchEvent(new Event("resize"));
+  }
+
+  // Meet positions its video stage and the tiles in it itself (inline offsets and sizes), with
+  // room for the caption panel, and recalculates neither when the panel collapses. So while
+  // captions are hidden, the tiles Meet drew are scaled up as one block (a CSS transform on the
+  // stage) to fill the space down to the controls, where the collapsed panel now sits, keeping
+  // the stage's side margin as the gap, never wider than the stage, centered. Meet's layout
+  // itself is untouched: turning hiding off removes the transform. Everything is measured on
+  // screen each time, so it fits any window size and any number of tiles. Meet re-renders the
+  // stage and resets its classes, so the rule names the stage by the page's own class.
+  let fitInfo = "";
+
+  // The stage: the largest positioned container, with an inline bottom offset, around any video
+  // or participant tile. Every one is checked: the first on the page can be an avatar in the
+  // top bar rather than a tile on the stage.
+  function findStage() {
+    let best = null, bestArea = 0;
+    const seen = new Set();
+    for (const tile of [...document.querySelectorAll("video, [data-participant-id]")].slice(0, 60)) {
+      for (let el = tile.parentElement; el && el !== document.body && !seen.has(el); el = el.parentElement) {
+        seen.add(el);
+        if (!/px$/.test(el.style.bottom) || el.contains(region)) continue;
+        const pos = getComputedStyle(el).position;
+        if (pos !== "absolute" && pos !== "fixed") continue;
+        const r = el.getBoundingClientRect();
+        if (r.width * r.height > bestArea) { best = el; bestArea = r.width * r.height; }
+      }
+    }
+    return best;
+  }
+
+  function selectorFor(el) {
+    const tag = el.tagName.toLowerCase();
+    for (const c of el.classList) {
+      if (c.startsWith("mt-")) continue;
+      const sel = `${tag}.${CSS.escape(c)}`;
+      if (document.querySelectorAll(sel).length === 1) return sel;
+    }
+    document.querySelectorAll("[data-mt-stage]").forEach((x) => { if (x !== el) delete x.dataset.mtStage; });
+    el.dataset.mtStage = "";
+    return "[data-mt-stage]";
+  }
+
+  // Where the call's controls start: the bar (at least half the window wide) around its buttons.
+  function controlsTop() {
+    for (const button of document.querySelectorAll(CONTROLS)) {
+      for (let el = button.parentElement; el && el !== document.body; el = el.parentElement) {
+        const r = el.getBoundingClientRect();
+        if (r.width < window.innerWidth / 2) continue;
+        if (r.height > window.innerHeight / 3 || el.contains(region)) break;
+        if (r.top > window.innerHeight / 2) return r.top;
+        break;
+      }
+    }
+    return 0;
+  }
+
+  function fitStage(hide) {
+    let css = document.getElementById("mt-stage-css");
+    const before = css ? css.textContent : "";
+    // Measure Meet's own layout, without our transform (no paint happens in between).
+    if (css) css.textContent = "";
+    const edge = hide && collapsed.length ? controlsTop() || collapsed[collapsed.length - 1].getBoundingClientRect().top : 0;
+    const stageEl = hide && edge > 0 ? findStage() : null;
+    let rule = "";
+    if (!hide) fitInfo = "off";
+    else if (!edge) fitInfo = "no collapsed caption panel";
+    else if (!stageEl) fitInfo = "no stage found";
+    else {
+      const st = stageEl.getBoundingClientRect();
+      const margin = Math.min(parseFloat(getComputedStyle(stageEl).left) || 0, 24);
+      // The tiles: every video and participant tile on the stage, as drawn. Not layers covering
+      // the whole stage (Meet's stage holds some), which would make the tiles look full already,
+      // and not icons or avatars inside a tile.
+      let l = Infinity, t = Infinity, r = -Infinity, b = -Infinity;
+      for (const c of stageEl.querySelectorAll("video, [data-participant-id]")) {
+        const cr = c.getBoundingClientRect();
+        if (cr.width < 80 || cr.height < 45) continue;
+        if (cr.width >= st.width * 0.98 && cr.height >= st.height * 0.98) continue;
+        l = Math.min(l, cr.left); t = Math.min(t, cr.top); r = Math.max(r, cr.right); b = Math.max(b, cr.bottom);
+      }
+      const availH = edge - margin - st.top, cw = r - l, ch = b - t;
+      const scale = cw > 0 && ch > 0 ? Math.min(availH / ch, st.width / cw) : 0;
+      if (scale > 1.02) {
+        // transform-origin is the stage's top-left: a point p lands at d + scale·p.
+        const dx = (st.width - cw * scale) / 2 - scale * (l - st.left);
+        const dy = (availH - ch * scale) / 2 - scale * (t - st.top);
+        const sel = selectorFor(stageEl);
+        rule = `${sel} { transform: translate(${dx.toFixed(1)}px, ${dy.toFixed(1)}px) scale(${scale.toFixed(4)}) !important; transform-origin: 0 0 !important; }`;
+        fitInfo = `${describe(stageEl)} tiles ${Math.round(cw)}×${Math.round(ch)} scaled ×${scale.toFixed(2)} via ${sel}`;
+      } else fitInfo = `${describe(stageEl)} tiles ${Math.round(cw)}×${Math.round(ch)} already fill ${Math.round(st.width)}×${Math.round(availH)}`;
+    }
+    if (!css && !rule) return false;
+    if (!css) {
+      css = document.createElement("style");
+      css.id = "mt-stage-css";
+      (document.head || document.documentElement).append(css);
+    }
+    css.textContent = rule;
+    return rule !== before;
+  }
+
+  // Where the caption area sits and what holds it: sizes and structure, never text.
+  function layoutReport() {
+    if (!region) return null;
+    const lines = [`window ${window.innerWidth}×${window.innerHeight}, hide ${settings.hideCaptions ? "on" : "off"}`];
+    lines.push("stage fit: " + (fitInfo || "not run"));
+    for (let el = region, i = 0; el && el !== document.documentElement && i < 10; el = el.parentElement, i++) {
+      const r = el.getBoundingClientRect(), cs = getComputedStyle(el);
+      lines.push(`${"  ".repeat(i)}${describe(el)} ${Math.round(r.width)}×${Math.round(r.height)} at ${Math.round(r.top)}` +
+        ` ${cs.display}/${cs.position}${cs.flex !== "0 1 auto" ? " flex " + cs.flex : ""}${cs.height !== "auto" ? " h " + cs.height : ""}` +
+        `${el.classList.contains("mt-collapsed") ? " COLLAPSED" : ""}${el.querySelector("video") ? " +video" : ""} children ${el.children.length}`);
+    }
+    // How the call's main area is sized, cameras on or off: the blocks of the call layout (the
+    // innermost window-sized container around the captions), two levels deep, with the
+    // positioning the page sets on them. The one that stops short of the controls is the stage.
+    const box = (el) => {
+      const r = el.getBoundingClientRect(), cs = getComputedStyle(el);
+      const inline = ["top", "bottom", "left", "height", "inset", "transform"].map((k) => el.style[k] && `${k}:${el.style[k]}`).filter(Boolean).join(" ");
+      return `${describe(el)} ${Math.round(r.width)}×${Math.round(r.height)} at ${Math.round(r.top)}–${Math.round(r.bottom)} ${cs.position}` +
+        `${cs.bottom !== "auto" && cs.position !== "static" ? " bottom " + cs.bottom : ""}${inline ? " {" + inline + "}" : ""}` +
+        `${el.contains(region) ? " ◀captions" : ""}${el.querySelector("video") ? " +video" : ""}`;
+    };
+    let call = region.parentElement || region;
+    while (call.parentElement && call !== document.body && call.getBoundingClientRect().height < window.innerHeight * 0.9) call = call.parentElement;
+    lines.push("call layout:", "  " + box(call));
+    const big = (el) => [...el.children].filter((c) => { const r = c.getBoundingClientRect(); return r.width * r.height > 20000 || c.contains(region); });
+    for (const c of big(call).slice(0, 12)) {
+      lines.push("    " + box(c));
+      for (const g of big(c).slice(0, 6)) lines.push("      " + box(g));
+    }
+    // From the main video (or a participant tile, cameras off) up to the call container: every
+    // level, since the stage often hangs off zero-size wrappers. Computed offsets included,
+    // so the level whose bottom stops short of the controls shows.
+    const tile = document.querySelector("video") || document.querySelector("[data-participant-id]");
+    if (tile) {
+      lines.push("stage path:");
+      for (let el = tile, i = 0; el && el !== call && i < 16; el = el.parentElement, i++) {
+        const cs = getComputedStyle(el);
+        const offs = ["top", "bottom", "height", "max-height", "transform", "inset"].map((k) => {
+          const v = cs.getPropertyValue(k);
+          return v && !/^(auto|none|0px|normal)$/.test(v) && !(k === "height") ? `${k} ${v}` : "";
+        }).filter(Boolean).join(", ");
+        lines.push(`  ${box(el)} ${cs.display}${offs ? " [" + offs + "]" : ""}`);
+      }
+    }
+    return lines.join("\n");
   }
 
   async function tryEnableCaptions(force = false) {
@@ -394,6 +582,9 @@
       .dot { width: 8px; height: 8px; border-radius: 50%; background: #8e8e93; flex: none; }
       .rec .dot { background: #ff453a; animation: pulse 1.6s ease-in-out infinite; }
       .warn .dot { background: #ff9f0a; }
+      .cc { padding: 0 8px; border-radius: 999px; background: rgba(255, 255, 255, 0.14); font-size: 11px; }
+      .cc:hover { background: rgba(255, 255, 255, 0.22); }
+      .cc[hidden] { display: none; }
       .x { width: 20px; justify-content: center; border-radius: 50%; color: rgba(255, 255, 255, 0.6); font-size: 14px; }
       .x:hover { background: rgba(255, 255, 255, 0.14); color: #fff; }
       button:focus-visible { outline: 2px solid #0a84ff; outline-offset: 2px; border-radius: 999px; }
@@ -401,15 +592,18 @@
       @media (prefers-reduced-motion: reduce) { .rec .dot { animation: none; } .main:active { transform: none; } }
       @media (prefers-reduced-transparency: reduce) { .pill { background: #1c1c1e; backdrop-filter: none; } }
     </style><div class="pill" part="pill"><button class="main"><span class="dot"></span><span class="text"></span></button>` +
+      `<button class="cc"></button>` +
       `<button class="x" aria-label="Hide for this call" title="Hide for this call">×</button></div>`;
-    const [main, x] = root.querySelectorAll("button");
+    const [main, cc, x] = root.querySelectorAll("button");
+    // Captions shown or hidden on screen, right from the call (same as the popup's switch).
+    cc.addEventListener("click", () => MT.saveSettings({ hideCaptions: !settings.hideCaptions }));
     main.addEventListener("click", () => {
       if (settings.paused) MT.saveSettings({ paused: false });
       else if (region) MT.saveSettings({ paused: true });
       else tryEnableCaptions(true);
     });
     x.addEventListener("click", () => { pillHidden = true; host.remove(); pill = null; });
-    return { host, box: root.querySelector(".pill"), main, text: root.querySelector(".text") };
+    return { host, box: root.querySelector(".pill"), main, cc, text: root.querySelector(".text") };
   }
 
   function renderPill(s) {
@@ -428,6 +622,10 @@
     pill.box.className = "pill " + cls;
     pill.text.textContent = text;
     pill.main.title = tip;
+    pill.cc.hidden = !region || s.paused;
+    pill.cc.textContent = settings.hideCaptions ? "Show captions" : "Hide captions";
+    pill.cc.title = settings.hideCaptions ? "Show the captions on screen (still recording either way)"
+      : "Hide the captions on screen and keep recording";
   }
 
   // --- diagnostics ---------------------------------------------------------------------------
@@ -440,7 +638,10 @@
     const attrs = ["data-tid", "role", "aria-live", "jsname"].map((a) => el.getAttribute(a) && `[${a}=${el.getAttribute(a)}]`).filter(Boolean);
     const aria = el.getAttribute("aria-label");
     if (aria) attrs.push(`[aria-label=${aria.slice(0, 40)}${aria.length > 40 ? "…" : ""}]`);
-    const cls = typeof el.className === "string" && el.className.trim() ? "." + el.className.trim().split(/\s+/).slice(0, 4).join(".") : "";
+    // The page's first classes, plus ours (mt-…) wherever they are, to show what we changed.
+    const all = typeof el.className === "string" ? el.className.trim().split(/\s+/).filter(Boolean) : [];
+    const shown = [...all.filter((c) => !c.startsWith("mt-")).slice(0, 4), ...all.filter((c) => c.startsWith("mt-"))];
+    const cls = shown.length ? "." + shown.join(".") : "";
     return `${el.tagName.toLowerCase()}${el.id ? "#" + el.id : ""}${cls}${attrs.join("")} (${(el.textContent || "").length} chars)`;
   }
 
@@ -463,6 +664,7 @@
       blocks: region ? P.blocks(region).length : 0,
       linesRecorded: session ? session.entries.length : 0,
       captionArea: region ? outline(region, 3) : null,
+      captionLayout: layoutReport(),
       candidates: candidates.map((el) => outline(el, 2)),
     };
   }
@@ -498,6 +700,12 @@
       return msg.type === "flush" || msg.type === "enableCaptions";
     });
     window.addEventListener("pagehide", save);
+    // A new window size (resized, or moved to another screen) moves the controls: refit the
+    // stage. Our own resize signal changes nothing here, so it doesn't loop.
+    // Meet re-renders its layout without touching the captions: re-check while hiding is on.
+    setInterval(() => { if (settings.hideCaptions && region) applyHide(); }, 1000);
+    let resizeTimer = 0;
+    window.addEventListener("resize", () => { clearTimeout(resizeTimer); resizeTimer = setTimeout(applyHide, 150); });
     document.addEventListener("visibilitychange", () => document.hidden && save());
     const loop = () => {
       tick();
