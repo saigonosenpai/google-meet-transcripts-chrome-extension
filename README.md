@@ -2,7 +2,7 @@
 
 ***Nobody knows that you're taking notes.***
 
-[![Download meeting-transcripts.zip](https://img.shields.io/badge/Download-meeting--transcripts.zip-2ea44f?style=for-the-badge&logo=googlechrome&logoColor=white)](https://github.com/saigonosenpai/meet-transcripts-chrome-extension/releases/latest/download/meeting-transcripts.zip)
+[![Download meet-transcripts-chrome-extension.zip](https://img.shields.io/badge/Download-meet--transcripts--chrome--extension.zip-2ea44f?style=for-the-badge&logo=googlechrome&logoColor=white)](https://github.com/saigonosenpai/meet-transcripts-chrome-extension/releases/latest/download/meet-transcripts-chrome-extension.zip)
 &nbsp; then follow the [install steps](#install) below.
 
 > GitHub's green **Code › Download ZIP** works too. The button above is just smaller (only the
@@ -30,7 +30,7 @@ browsers.
 The extension isn't on the Chrome Web Store, so you add it to Chrome yourself. It takes
 about two minutes and works the same on Windows and Mac.
 
-**1. Download** [**meeting-transcripts.zip**](https://github.com/saigonosenpai/meet-transcripts-chrome-extension/releases/latest/download/meeting-transcripts.zip)
+**1. Download** [**meet-transcripts-chrome-extension.zip**](https://github.com/saigonosenpai/meet-transcripts-chrome-extension/releases/latest/download/meet-transcripts-chrome-extension.zip)
 (always the latest version). GitHub's green **Code › Download ZIP** button works as well:
 it's the full source code, which loads the same way.
 
@@ -38,15 +38,15 @@ it's the full source code, which loads the same way.
 it somewhere you won't clean up, and don't delete it later.
 - **Windows:** right-click the ZIP › **Extract All…** › click **Browse** and choose
   **Documents** › **Extract**.
-- **Mac:** double-click the ZIP, then drag the new `meeting-transcripts` folder into
+- **Mac:** double-click the ZIP, then drag the new `meet-transcripts-chrome-extension` folder into
   **Documents**.
 
-You now have a folder called **`meeting-transcripts`** with the extension's files directly
+You now have a folder called **`meet-transcripts-chrome-extension`** with the extension's files directly
 inside it, including **`manifest.json`**:
 
 ```
 Documents
-└── meeting-transcripts        ← select this folder in step 4
+└── meet-transcripts-chrome-extension   ← select this folder in step 4
     ├── manifest.json
     ├── background.js
     ├── INSTALL.txt
@@ -58,7 +58,7 @@ Documents
 **3. Open `chrome://extensions`** (type it into the address bar; in Edge it's
 `edge://extensions`) and turn on **Developer mode** in the top-right corner ①.
 
-**4. Click Load unpacked** ② and select the **`meeting-transcripts`** folder from step 2,
+**4. Click Load unpacked** ② and select the **`meet-transcripts-chrome-extension`** folder from step 2,
 the one that has `manifest.json` directly inside it. Then click **Select Folder**.
 
 ![chrome://extensions: the Developer mode switch top right (1), and the Load unpacked button that appears top left (2)](docs/screenshots/install-load-unpacked.png)
@@ -173,7 +173,7 @@ your history back:
 
 **The short version: replace the files, click reload. Don't click Remove.**
 
-1. Download the new [**meeting-transcripts.zip**](https://github.com/saigonosenpai/meet-transcripts-chrome-extension/releases/latest/download/meeting-transcripts.zip),
+1. Download the new [**meet-transcripts-chrome-extension.zip**](https://github.com/saigonosenpai/meet-transcripts-chrome-extension/releases/latest/download/meet-transcripts-chrome-extension.zip),
    or run `git pull` if you cloned it. To hear about new versions, click **Watch → Custom →
    Releases** at the top of this page.
 2. Copy the new files **over your existing folder**, the one you selected in step 4 of
@@ -437,7 +437,7 @@ Yes: **Export** on one and **Import** on the other. See
 
 **"Manifest file is missing or unreadable" when loading it.** You selected a folder that
 doesn't directly contain `manifest.json`, usually the one above it. Select the
-`meeting-transcripts` folder that has `manifest.json` inside (see [Install](#install), step 4).
+`meet-transcripts-chrome-extension` folder that has `manifest.json` inside (see [Install](#install), step 4).
 With GitHub's Code › Download ZIP on Windows, that's the inner
 `meet-transcripts-chrome-extension-main` folder, inside the one of the same name.
 
