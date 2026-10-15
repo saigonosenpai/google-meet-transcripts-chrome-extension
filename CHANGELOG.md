@@ -15,7 +15,7 @@ it's pushed to `main` with the matching `version` in `manifest.json`.
   from the call.
 - **Show or hide captions from the call.** The in-call pill has a *Show captions* /
   *Hide captions* button, the same switch as in the popup.
-- **The popup shows the installed version** in its top-right corner.
+- **The popup shows the installed version** in its top-right corner, and the tagline gets a 😉.
 - **Copy a report** now also describes the layout around the captions (sizes and
   structure, never what was said), to fix this quickly if a call page lays out
   differently.
