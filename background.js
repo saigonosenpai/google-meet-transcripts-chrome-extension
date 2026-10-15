@@ -262,7 +262,14 @@ settleLibraryReady();
 
 // After a fresh install, open the transcripts page so a previous library can be imported. An
 // update keeps whatever the library was; it doesn't make an unimported one "ready".
-chrome.runtime.onInstalled.addListener(async ({ reason }) => {
+chrome.runtime.onInstalled.addListener(async ({ reason, previousVersion }) => {
+  // Before 2.6.0, hiding captions left an empty strip in the call, so many turned it off.
+  // It now gives the video that space: switch it on once for everyone (it's on by default).
+  const [major, minor] = (previousVersion || "").split(".").map(Number);
+  if (reason === "update" && (major < 2 || (major === 2 && minor < 6))) {
+    const { settings } = await chrome.storage.local.get("settings");
+    if (settings && settings.hideCaptions === false) await MT.saveSettings({ hideCaptions: true });
+  }
   if (reason !== "install") return;
   const { libraryReady } = await chrome.storage.local.get("libraryReady");
   if (libraryReady === undefined) await chrome.storage.local.set({ libraryReady: false });

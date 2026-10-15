@@ -10,6 +10,9 @@ it's pushed to `main` with the matching `version` in `manifest.json`.
   completely: the empty strip they left at the bottom of the call is gone and the video
   is enlarged into the space, on any screen size. Turn the switch off and the captions
   come back where they were.
+- **Hide captions on screen is on by default**, and updating to 2.6.0 switches it on once
+  for everyone, since it now gives the video the space back. Turn it off in the popup or
+  from the call.
 - **Show or hide captions from the call.** The in-call pill has a *Show captions* /
   *Hide captions* button, the same switch as in the popup.
 - **The popup shows the installed version** in its top-right corner.

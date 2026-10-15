@@ -52,6 +52,7 @@ await sw.goto(`chrome-extension://${id}/viewer/viewer.html`);
 const today = new Date(); const pad = (n) => String(n).padStart(2, "0");
 const date = `${today.getFullYear()}-${pad(today.getMonth() + 1)}-${pad(today.getDate())}`;
 const dayDir = path.join(downloads, "Meeting Transcripts", date);
+assert.equal((await sw.evaluate(() => MT.getSettings())).hideCaptions, true, "captions are hidden on screen by default");
 const fileOf = (mid) => sw.evaluate((k) => chrome.storage.local.get(k).then((d) => d[k]), "f:" + mid);
 
 // Names read together with a hidden copy of themselves are collapsed; real names are left alone.
