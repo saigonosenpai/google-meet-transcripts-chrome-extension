@@ -378,6 +378,17 @@
     return "[data-mt-stage]";
   }
 
+  // Where the shown caption panel starts: the top of the captions and the containers around
+  // them that hold nothing else (the same ones hiding collapses).
+  function captionTop() {
+    let top = Infinity;
+    for (let el = region, i = 0; el && i < 7 && (el === region || collapsible(el)); el = el.parentElement, i++) {
+      const r = el.getBoundingClientRect();
+      if (r.height > 0 && r.width > 0) top = Math.min(top, r.top);
+    }
+    return top < Infinity && top > window.innerHeight / 3 ? top : 0;
+  }
+
   // Where the call's controls start: the bar (at least half the window wide) around its buttons.
   function controlsTop() {
     for (const button of document.querySelectorAll(CONTROLS)) {
@@ -397,11 +408,15 @@
     const before = css ? css.textContent : "";
     // Measure Meet's own layout, without our transform (no paint happens in between).
     if (css) css.textContent = "";
-    const edge = hide && collapsed.length ? controlsTop() || collapsed[collapsed.length - 1].getBoundingClientRect().top : 0;
-    const stageEl = hide && edge > 0 ? findStage() : null;
+    // Hidden: the tiles fill the space down to the controls. Shown: they fit above the caption
+    // panel. Meet only re-measures that space on its own events (someone joining, a resize), so
+    // after captions were hidden it can keep laying the tiles out over the panel once they're back.
+    const edge = !region ? 0 : hide ? (collapsed.length ? controlsTop() || collapsed[collapsed.length - 1].getBoundingClientRect().top : 0)
+      : captionTop();
+    const stageEl = edge > 0 ? findStage() : null;
     let rule = "";
-    if (!hide) fitInfo = "off";
-    else if (!edge) fitInfo = "no collapsed caption panel";
+    if (!region) fitInfo = "no captions";
+    else if (!edge) fitInfo = hide ? "no collapsed caption panel" : "no caption panel";
     else if (!stageEl) fitInfo = "no stage found";
     else {
       const st = stageEl.getBoundingClientRect();
@@ -418,12 +433,13 @@
       }
       const availH = edge - margin - st.top, cw = r - l, ch = b - t;
       const scale = cw > 0 && ch > 0 ? Math.min(availH / ch, st.width / cw) : 0;
-      if (scale > 1.02) {
+      // Hidden, only ever enlarged; shown, only ever shrunk (when Meet's tiles run under the panel).
+      if (hide ? scale > 1.02 : scale > 0 && scale < 0.98 && b > edge + 2) {
         // transform-origin is the stage's top-left: a point p lands at d + scale·p.
         const dx = (st.width - cw * scale) / 2 - scale * (l - st.left);
         const dy = (availH - ch * scale) / 2 - scale * (t - st.top);
         const sel = selectorFor(stageEl);
-        // Scaled up, the stage reaches past its own box: clip it to the space it now fills
+        // Scaled, the stage can reach past the space it should fill: clip it to that space
         // (in its own, unscaled pixels), so its empty edges never cover a side panel or the
         // window's edge, nor take the clicks meant for what's under them.
         const inset = [-dy / scale, st.width - (st.width - dx) / scale, st.height - (availH - dy) / scale, -dx / scale]
@@ -431,7 +447,7 @@
         rule = `${sel} { transform: translate(${dx.toFixed(1)}px, ${dy.toFixed(1)}px) scale(${scale.toFixed(4)}) !important;` +
           ` transform-origin: 0 0 !important; clip-path: inset(${inset}) !important; }`;
         fitInfo = `${describe(stageEl)} tiles ${Math.round(cw)}×${Math.round(ch)} scaled ×${scale.toFixed(2)} via ${sel}`;
-      } else fitInfo = `${describe(stageEl)} tiles ${Math.round(cw)}×${Math.round(ch)} already fill ${Math.round(st.width)}×${Math.round(availH)}`;
+      } else fitInfo = `${describe(stageEl)} tiles ${Math.round(cw)}×${Math.round(ch)} ${hide ? "already fill" : "fit in"} ${Math.round(st.width)}×${Math.round(availH)}`;
     }
     if (!css && !rule) return false;
     if (!css) {
@@ -778,8 +794,8 @@
     window.addEventListener("pagehide", save);
     // A new window size (resized, or moved to another screen) moves the controls: refit the
     // stage. Our own resize signal changes nothing here, so it doesn't loop.
-    // Meet re-renders its layout without touching the captions: re-check while hiding is on.
-    setInterval(() => { if (settings.hideCaptions && region) applyHide(); }, 1000);
+    // Meet re-renders its layout without touching the captions: re-check, hidden or shown.
+    setInterval(() => { if (region) applyHide(); }, 1000);
     let resizeTimer = 0;
     window.addEventListener("resize", () => {
       if (pill) placePill(pill.host); // same spot, still on screen

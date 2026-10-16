@@ -10,6 +10,10 @@ it's pushed to `main` with the matching `version` in `manifest.json`.
   Double-click it to put it back in the corner.
 - **Hidden captions: the enlarged video stays within its own area.** It never covers a
   side panel (chat, people) or takes its clicks.
+- **Fixed: showing captions again could put them over the video.** If Meet laid the call out
+  again while captions were hidden (someone joining, for example), it left no room for them,
+  so once shown they covered the bottom of the tiles. The tiles now shrink to fit above the
+  captions until Meet makes room itself.
 - Releases no longer include the old `meeting-transcripts.zip`.
 
 ## 2.6.2

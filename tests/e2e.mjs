@@ -270,7 +270,8 @@ console.log("restored meetings:", titlesAfter.join(" | "));
   }
   assert.ok(lines.some((e) => e.text.includes("Great, thanks everyone.")), "still recording while hidden");
   // Any screen size, and resizing mid-call (Meet re-sets its own offset when the window resizes).
-  await hp.evaluate(() => addEventListener("resize", layoutStage));
+  // Only on real resizes: Meet doesn't lay out again for the resize event the extension sends.
+  await hp.evaluate(() => addEventListener("resize", (e) => e.isTrusted && layoutStage()));
   // Nothing spills past the stage: scaled up, the stage is clipped to the space it fills, so its
   // empty edges don't cover the window's edges or the controls, nor take their clicks.
   const overflow = () => hp.evaluate(() => {
@@ -413,6 +414,31 @@ console.log("restored meetings:", titlesAfter.join(" | "));
   const again = await layout();
   assert.equal(again.strip, 0, "collapsed again");
   fits(again, 1000, 700, "hidden again");
+  // Someone joins while captions are hidden: Meet lays the tiles out with no room for captions.
+  // Shown again, the tiles must fit above the caption panel, not run under it.
+  await hp.evaluate(() => someoneJoined());
+  await hp.waitForTimeout(1500);
+  fits(await layout(), 1000, 700, "hidden, after Meet laid out again");
+  await pillCall("function () { this.click(); }");
+  await hp.waitForTimeout(1500);
+  {
+    const l = await layout();
+    const panelTop = await hp.evaluate(() => document.getElementById("capbar").getBoundingClientRect().top);
+    const t = l.tile, near = (a, b) => Math.abs(a - b) <= 2;
+    console.log("shown after Meet laid out without captions:", JSON.stringify(t), "panel at", panelTop);
+    assert.ok(l.strip >= 140 && l.captionsLeft >= 0, "captions back on screen");
+    assert.ok(t.bottom <= panelTop - 16 + 1 && t.top >= -1, "tiles fit above the caption panel " + JSON.stringify(t));
+    assert.ok(near(t.left - 16, 1000 - 16 - t.right), "tiles centered " + JSON.stringify(t));
+    const hit = await hp.evaluate(() => document.elementFromPoint(500, document.getElementById("capbar").getBoundingClientRect().top + 30)?.closest("#capbar") !== null);
+    assert.ok(hit, "the caption panel isn't covered by the stage");
+  }
+  // Meet lays out again with captions shown: its own layout fits, nothing of ours is applied.
+  await hp.evaluate(() => someoneJoined());
+  await hp.waitForTimeout(1500);
+  assert.equal(await hp.evaluate(() => getComputedStyle(document.getElementById("stage")).transform), "none", "Meet's own layout, untouched, once it fits");
+  await pillCall("function () { this.click(); }");
+  await hp.waitForTimeout(1000);
+  fits(await layout(), 1000, 700, "hidden once more");
   await hp.close();
   console.log("hide captions: tiles", Math.round(hidden.tile.width) + "×" + Math.round(hidden.tile.height), "(from 782×440), still recording; off again:", shown.strip, "px strip");
 }
