@@ -3,6 +3,15 @@
 Each version here becomes a release on GitHub, with the extension zip attached, as soon as
 it's pushed to `main` with the matching `version` in `manifest.json`.
 
+## 2.6.3
+
+- **Move the in-call pill.** Drag the *Recording captions* pill anywhere it's not in the
+  way. It stays there in later calls and on any screen size, always fully on screen.
+  Double-click it to put it back in the corner.
+- **Hidden captions: the enlarged video stays within its own area.** It never covers a
+  side panel (chat, people) or takes its clicks.
+- Releases no longer include the old `meeting-transcripts.zip`.
+
 ## 2.6.2
 
 - **The download is now called `meet-transcripts-chrome-extension.zip`**, so the
