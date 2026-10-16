@@ -139,7 +139,7 @@ If you use git, you can instead clone this repository and select the cloned fold
 for that call. **Drag it** anywhere out of the way: it stays there in later calls, on any
 screen size. Double-click it to put it back in the corner. Only you see it.
 
-![A dark pill reading "Recording captions" with a red dot and a close button](docs/screenshots/indicator.png)
+<img src="docs/screenshots/indicator.png" width="320" alt="A dark pill with a drag grip, a red dot, &quot;Recording captions&quot;, a Show captions button and a close button">
 
 **Action items, decisions and questions** pulled out of the transcript with one click:
 
