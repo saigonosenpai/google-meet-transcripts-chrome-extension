@@ -7,8 +7,9 @@
      neither is recalculated when the space around them changes, only on a window resize. */
   body { margin: 0; height: 100vh; overflow: hidden; }
   #stage { position: absolute; top: 0; left: 16px; right: 16px; }
-  #grid { position: absolute; background: #333; }
-  #grid video { width: 100%; height: 100%; }
+  #grid { position: absolute; background: #333; overflow: hidden; }
+  /* Like Meet with a camera on: the video is drawn wider than its tile, which crops it. */
+  #grid video { position: absolute; top: 0; left: -40%; width: 180%; height: 100%; }
   #bottom { position: absolute; left: 0; right: 0; bottom: 0; }
   #capbar { padding: 12px 0; }
   #capbar > div { height: 140px; overflow: hidden; } /* like Meet: a fixed-height panel */

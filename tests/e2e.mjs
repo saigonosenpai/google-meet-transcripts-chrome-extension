@@ -251,6 +251,8 @@ console.log("restored meetings:", titlesAfter.join(" | "));
     assert.ok(t.bottom <= floor + 1, `${what}: tiles stay above the controls ${JSON.stringify(t)}`);
     assert.ok(near(t.bottom, floor) || near(t.width, w - 32), `${what}: tiles fill the space ${JSON.stringify(t)}`);
     assert.ok(near(t.left - 16, w - 16 - t.right), `${what}: tiles centered ${JSON.stringify(t)}`);
+    // As wide as they can be (a row of cameras, a tall window): centered top to bottom too.
+    if (!near(t.bottom, floor)) assert.ok(near(t.top, floor - t.bottom), `${what}: tiles centered top to bottom ${JSON.stringify(t)}`);
   };
   const hidden = await layout();
   console.log("captions hidden:", JSON.stringify(hidden));
