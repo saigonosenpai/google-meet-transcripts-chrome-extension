@@ -135,7 +135,9 @@ If you use git, you can instead clone this repository and select the cloned fold
 | ![The popup: recording status, settings, which platforms to record, and the All Transcripts button](docs/screenshots/popup.png) | ![The popup in dark mode](docs/screenshots/popup-dark.png) |
 
 **In the call**, a pill shows it's recording. Click it to pause, resume, or turn captions on;
-the × hides it for that call. Only you see it.
+*Show captions* / *Hide captions* switches the captions on screen, and the × hides the pill
+for that call. **Drag it** anywhere out of the way: it stays there in later calls, on any
+screen size. Double-click it to put it back in the corner. Only you see it.
 
 ![A dark pill reading "Recording captions" with a red dot and a close button](docs/screenshots/indicator.png)
 

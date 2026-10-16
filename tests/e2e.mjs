@@ -247,7 +247,7 @@ console.log("restored meetings:", titlesAfter.join(" | "));
   // width if that comes first, centered, and never over the controls.
   const fits = (l, w, h, what) => {
     const t = l.tile, floor = h - 80 - 16, near = (a, b) => Math.abs(a - b) <= 2;
-    assert.ok(t.top >= -1, `${what}: tiles stay on screen ${JSON.stringify(t)}`);
+    assert.ok(t.top >= -1 && t.left >= -1 && t.right <= w + 1, `${what}: tiles stay on screen ${JSON.stringify(t)}`);
     assert.ok(t.bottom <= floor + 1, `${what}: tiles stay above the controls ${JSON.stringify(t)}`);
     assert.ok(near(t.bottom, floor) || near(t.width, w - 32), `${what}: tiles fill the space ${JSON.stringify(t)}`);
     assert.ok(near(t.left - 16, w - 16 - t.right), `${what}: tiles centered ${JSON.stringify(t)}`);
@@ -270,17 +270,112 @@ console.log("restored meetings:", titlesAfter.join(" | "));
   }
   assert.ok(lines.some((e) => e.text.includes("Great, thanks everyone.")), "still recording while hidden");
   // Any screen size, and resizing mid-call (Meet re-sets its own offset when the window resizes).
-  await hp.evaluate(() => addEventListener("resize", layoutStage));
-  for (const [w, h] of [[1366, 768], [1920, 1080], [2560, 1440], [1280, 720]]) {
+  // Only on real resizes: Meet doesn't lay out again for the resize event the extension sends.
+  await hp.evaluate(() => addEventListener("resize", (e) => e.isTrusted && layoutStage()));
+  // Nothing spills past the stage: scaled up, the stage is clipped to the space it fills, so its
+  // empty edges don't cover the window's edges or the controls, nor take their clicks.
+  const overflow = () => hp.evaluate(() => {
+    const stage = document.getElementById("stage"), st = getComputedStyle(stage);
+    const area = { left: parseFloat(st.left), right: innerWidth - parseFloat(st.right), bottom: document.getElementById("controls").getBoundingClientRect().top };
+    const onStage = (x, y) => stage.contains(document.elementFromPoint(x, y));
+    const out = [[2, 200], [innerWidth - 3, 200], [area.right + 2, 200], [innerWidth / 2, area.bottom + 4]]
+      .filter(([x, y]) => x < area.left || x > area.right || y > area.bottom).filter(([x, y]) => onStage(x, y));
+    const cp = getComputedStyle(stage).clipPath;
+    return { covered: out, clipped: cp !== "none" || getComputedStyle(stage).transform === "none" };
+  });
+  const sizes = [[1366, 768], [1920, 1080], [2560, 1440], [1280, 720], [800, 500], [700, 1000], [3440, 1440], [1024, 640], [1536, 864]];
+  for (const [w, h] of sizes) {
     await hp.setViewportSize({ width: w, height: h });
     await hp.waitForTimeout(500);
     const l = await layout();
     assert.equal(l.strip, 0, `strip collapsed at ${w}×${h}`);
     fits(l, w, h, `${w}×${h}`);
+    const o = await overflow();
+    assert.deepEqual(o.covered, [], `nothing spills past the stage at ${w}×${h}`);
+    assert.ok(o.clipped, `stage clipped when scaled at ${w}×${h}`);
   }
+  // Resizing in small steps, as when dragging the window's edge: it refits every time.
+  for (let w = 1400; w >= 900; w -= 125) {
+    await hp.setViewportSize({ width: w, height: Math.round(w * 0.6) });
+    await hp.waitForTimeout(250);
+  }
+  await hp.waitForTimeout(400);
+  fits(await layout(), 900, 540, "after dragging the window smaller");
+  // A side panel open (chat, people): Meet narrows the stage, and the tiles stay out of the panel.
+  await hp.setViewportSize({ width: 1440, height: 900 });
+  await hp.evaluate(() => {
+    const panel = document.createElement("aside");
+    panel.id = "panel";
+    panel.style.cssText = "position:absolute;top:16px;right:16px;bottom:96px;width:344px;background:#222";
+    document.body.prepend(panel); // earlier in the page: the stage paints over it if it spills
+    document.getElementById("stage").style.right = "376px";
+    layoutStage();
+  });
+  await hp.waitForTimeout(1500);
+  {
+    const t = (await layout()).tile, floor = 900 - 80 - 16, near = (a, b) => Math.abs(a - b) <= 2;
+    assert.ok(t.left >= 15 && t.right <= 1440 - 376 + 1 && t.bottom <= floor + 1 && t.top >= -1, "tiles stay beside the side panel " + JSON.stringify(t));
+    assert.ok(near(t.left - 16, 1440 - 376 - t.right), "tiles centered on the narrower stage " + JSON.stringify(t));
+    assert.ok(t.height > 500, "tiles still enlarged beside the panel " + JSON.stringify(t));
+    const hits = await hp.evaluate(() => [[1440 - 300, 150], [1440 - 200, 450], [1440 - 360, 700]]
+      .map(([x, y]) => document.elementFromPoint(x, y)?.id));
+    assert.deepEqual(hits, ["panel", "panel", "panel"], "the side panel stays visible and clickable");
+  }
+  await hp.evaluate(() => { document.getElementById("panel").remove(); document.getElementById("stage").style.right = ""; layoutStage(); });
   await hp.setViewportSize({ width: 1000, height: 700 });
   await hp.waitForTimeout(500);
-  console.log("hide captions: tiles fit at 1366×768, 1920×1080, 2560×1440, 1280×720 and when resized");
+  console.log("hide captions: tiles fit, nothing spills past the stage at", sizes.map((s) => s.join("×")).join(", "), "· while resizing · with a side panel open");
+
+  // The in-call indicator can be dragged anywhere and stays where it was left.
+  {
+    const pillRect = () => hp.evaluate(() => (({ left, top, right, bottom, width, height }) => ({ left, top, right, bottom, width, height }))(
+      document.getElementById("meeting-transcripts-indicator").getBoundingClientRect()));
+    const before = await pillRect();
+    const pausedBefore = (await sw.evaluate(() => MT.getSettings())).paused;
+    // Grab it by its grip (left end) and drag it to the top right.
+    const gx = before.left + 6, gy = before.top + before.height / 2;
+    await hp.mouse.move(gx, gy);
+    await hp.mouse.down();
+    for (let i = 1; i <= 10; i++) await hp.mouse.move(gx + (700 - gx) * i / 10, gy + (40 - gy) * i / 10);
+    await hp.mouse.up();
+    await hp.waitForTimeout(300);
+    const moved = await pillRect();
+    assert.ok(Math.abs(moved.left - (700 - 6)) <= 2 && Math.abs(moved.top + moved.height / 2 - 40) <= 2, "pill follows the drag " + JSON.stringify(moved));
+    assert.equal((await sw.evaluate(() => MT.getSettings())).paused, pausedBefore, "dragging isn't a click: recording not paused");
+    const saved = await sw.evaluate(() => chrome.storage.local.get("pillPos").then((d) => d.pillPos));
+    assert.ok(saved && saved.x > 0 && saved.y >= 0, "position saved " + JSON.stringify(saved));
+    // Dragged past the edge: it stops at the edge, fully on screen.
+    await hp.mouse.move(moved.left + 6, moved.top + moved.height / 2);
+    await hp.mouse.down();
+    for (let i = 1; i <= 5; i++) await hp.mouse.move(moved.left + 6 + 120 * i, moved.top - 30 * i);
+    await hp.mouse.up();
+    await hp.waitForTimeout(300);
+    const edge = await pillRect();
+    assert.ok(Math.abs(edge.right - 1000) <= 1 && Math.abs(edge.top) <= 1, "pill stops at the window's edge " + JSON.stringify(edge));
+    // A smaller window: same corner, still fully on screen.
+    await hp.setViewportSize({ width: 640, height: 480 });
+    await hp.waitForTimeout(400);
+    const small = await pillRect();
+    assert.ok(small.right <= 640 + 0.5 && small.left >= 0 && small.top >= 0 && Math.abs(small.right - 640) <= 1, "pill on screen in a smaller window " + JSON.stringify(small));
+    await hp.setViewportSize({ width: 1000, height: 700 });
+    await hp.waitForTimeout(400);
+    // Kept for the next call: a new call page puts it in the same place.
+    const hp2 = await ctx.newPage();
+    await hp2.setViewportSize({ width: 1000, height: 700 });
+    await hp2.goto("https://meet.google.com/pil-lpos-tns");
+    await hp2.waitForFunction(() => document.getElementById("meeting-transcripts-indicator"), null, { timeout: 30000 });
+    await hp2.waitForTimeout(500);
+    const next = await hp2.evaluate(() => document.getElementById("meeting-transcripts-indicator").getBoundingClientRect().toJSON());
+    assert.ok(Math.abs(next.right - 1000) <= 1 && Math.abs(next.top) <= 1, "same place in the next call " + JSON.stringify(next));
+    await hp2.close();
+    // Double-click puts it back in its corner.
+    await hp.mouse.dblclick(edge.left + 6, edge.top + edge.height / 2);
+    await hp.waitForTimeout(300);
+    const back = await pillRect();
+    assert.ok(Math.abs(back.left - before.left) <= 1 && Math.abs(back.top - before.top) <= 1, "double-click puts it back " + JSON.stringify(back));
+    assert.equal(await sw.evaluate(() => chrome.storage.local.get("pillPos").then((d) => d.pillPos)), undefined);
+    console.log("pill: dragged to the top right, kept on screen at the edge and in a smaller window, same place next call, double-click puts it back");
+  }
   // "Copy a report" includes the layout around the captions, never what was said.
   const report = await sw.evaluate(async () => {
     const [tab] = await chrome.tabs.query({ url: "https://meet.google.com/hid-ecap-tns" });
@@ -319,6 +414,31 @@ console.log("restored meetings:", titlesAfter.join(" | "));
   const again = await layout();
   assert.equal(again.strip, 0, "collapsed again");
   fits(again, 1000, 700, "hidden again");
+  // Someone joins while captions are hidden: Meet lays the tiles out with no room for captions.
+  // Shown again, the tiles must fit above the caption panel, not run under it.
+  await hp.evaluate(() => someoneJoined());
+  await hp.waitForTimeout(1500);
+  fits(await layout(), 1000, 700, "hidden, after Meet laid out again");
+  await pillCall("function () { this.click(); }");
+  await hp.waitForTimeout(1500);
+  {
+    const l = await layout();
+    const panelTop = await hp.evaluate(() => document.getElementById("capbar").getBoundingClientRect().top);
+    const t = l.tile, near = (a, b) => Math.abs(a - b) <= 2;
+    console.log("shown after Meet laid out without captions:", JSON.stringify(t), "panel at", panelTop);
+    assert.ok(l.strip >= 140 && l.captionsLeft >= 0, "captions back on screen");
+    assert.ok(t.bottom <= panelTop - 16 + 1 && t.top >= -1, "tiles fit above the caption panel " + JSON.stringify(t));
+    assert.ok(near(t.left - 16, 1000 - 16 - t.right), "tiles centered " + JSON.stringify(t));
+    const hit = await hp.evaluate(() => document.elementFromPoint(500, document.getElementById("capbar").getBoundingClientRect().top + 30)?.closest("#capbar") !== null);
+    assert.ok(hit, "the caption panel isn't covered by the stage");
+  }
+  // Meet lays out again with captions shown: its own layout fits, nothing of ours is applied.
+  await hp.evaluate(() => someoneJoined());
+  await hp.waitForTimeout(1500);
+  assert.equal(await hp.evaluate(() => getComputedStyle(document.getElementById("stage")).transform), "none", "Meet's own layout, untouched, once it fits");
+  await pillCall("function () { this.click(); }");
+  await hp.waitForTimeout(1000);
+  fits(await layout(), 1000, 700, "hidden once more");
   await hp.close();
   console.log("hide captions: tiles", Math.round(hidden.tile.width) + "×" + Math.round(hidden.tile.height), "(from 782×440), still recording; off again:", shown.strip, "px strip");
 }

@@ -11,7 +11,7 @@
   #grid video { width: 100%; height: 100%; }
   #bottom { position: absolute; left: 0; right: 0; bottom: 0; }
   #capbar { padding: 12px 0; }
-  #capbar > div { min-height: 140px; }
+  #capbar > div { height: 140px; overflow: hidden; } /* like Meet: a fixed-height panel */
   #controls { height: 80px; }
 </style></head>
 <body>
@@ -39,15 +39,19 @@
 const scheduled = location.pathname === "/abc-defg-hij";
 document.title = scheduled ? "Meet - Weekly sync" : "Meet - " + location.pathname.slice(1);
 let region = null, captionsOn = false;
-const layoutStage = () => {
+const layoutStage = (measure) => {
   const stage = document.getElementById("stage"), grid = document.getElementById("grid");
   // From its own state, like Meet: room for the controls, plus the caption panel when captions are on.
-  stage.style.bottom = 80 + (captionsOn ? 164 : 0) + 16 + "px";
+  // On some of its own events (someone joining) Meet measures the bottom bar instead: if the
+  // caption panel is collapsed then, it leaves it no room, until it next lays out.
+  const room = measure ? document.getElementById("bottom").offsetHeight : 80 + (captionsOn ? 164 : 0);
+  stage.style.bottom = room + 16 + "px";
   const W = stage.offsetWidth, H = stage.offsetHeight;
   const h = Math.min(H, W * 9 / 16), w = h * 16 / 9;
   Object.assign(grid.style, { left: (W - w) / 2 + "px", top: (H - h) / 2 + "px", width: w + "px", height: h + "px" });
 };
 layoutStage();
+window.someoneJoined = () => layoutStage(true);
 // Meet re-renders the stage, resetting its class list: classes added by others don't last.
 setInterval(() => { document.getElementById("stage").className = "stg"; }, 300);
 document.getElementById("cc").onclick = (e) => {

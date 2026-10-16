@@ -378,6 +378,17 @@
     return "[data-mt-stage]";
   }
 
+  // Where the shown caption panel starts: the top of the captions and the containers around
+  // them that hold nothing else (the same ones hiding collapses).
+  function captionTop() {
+    let top = Infinity;
+    for (let el = region, i = 0; el && i < 7 && (el === region || collapsible(el)); el = el.parentElement, i++) {
+      const r = el.getBoundingClientRect();
+      if (r.height > 0 && r.width > 0) top = Math.min(top, r.top);
+    }
+    return top < Infinity && top > window.innerHeight / 3 ? top : 0;
+  }
+
   // Where the call's controls start: the bar (at least half the window wide) around its buttons.
   function controlsTop() {
     for (const button of document.querySelectorAll(CONTROLS)) {
@@ -397,11 +408,15 @@
     const before = css ? css.textContent : "";
     // Measure Meet's own layout, without our transform (no paint happens in between).
     if (css) css.textContent = "";
-    const edge = hide && collapsed.length ? controlsTop() || collapsed[collapsed.length - 1].getBoundingClientRect().top : 0;
-    const stageEl = hide && edge > 0 ? findStage() : null;
+    // Hidden: the tiles fill the space down to the controls. Shown: they fit above the caption
+    // panel. Meet only re-measures that space on its own events (someone joining, a resize), so
+    // after captions were hidden it can keep laying the tiles out over the panel once they're back.
+    const edge = !region ? 0 : hide ? (collapsed.length ? controlsTop() || collapsed[collapsed.length - 1].getBoundingClientRect().top : 0)
+      : captionTop();
+    const stageEl = edge > 0 ? findStage() : null;
     let rule = "";
-    if (!hide) fitInfo = "off";
-    else if (!edge) fitInfo = "no collapsed caption panel";
+    if (!region) fitInfo = "no captions";
+    else if (!edge) fitInfo = hide ? "no collapsed caption panel" : "no caption panel";
     else if (!stageEl) fitInfo = "no stage found";
     else {
       const st = stageEl.getBoundingClientRect();
@@ -418,14 +433,21 @@
       }
       const availH = edge - margin - st.top, cw = r - l, ch = b - t;
       const scale = cw > 0 && ch > 0 ? Math.min(availH / ch, st.width / cw) : 0;
-      if (scale > 1.02) {
+      // Hidden, only ever enlarged; shown, only ever shrunk (when Meet's tiles run under the panel).
+      if (hide ? scale > 1.02 : scale > 0 && scale < 0.98 && b > edge + 2) {
         // transform-origin is the stage's top-left: a point p lands at d + scale·p.
         const dx = (st.width - cw * scale) / 2 - scale * (l - st.left);
         const dy = (availH - ch * scale) / 2 - scale * (t - st.top);
         const sel = selectorFor(stageEl);
-        rule = `${sel} { transform: translate(${dx.toFixed(1)}px, ${dy.toFixed(1)}px) scale(${scale.toFixed(4)}) !important; transform-origin: 0 0 !important; }`;
+        // Scaled, the stage can reach past the space it should fill: clip it to that space
+        // (in its own, unscaled pixels), so its empty edges never cover a side panel or the
+        // window's edge, nor take the clicks meant for what's under them.
+        const inset = [-dy / scale, st.width - (st.width - dx) / scale, st.height - (availH - dy) / scale, -dx / scale]
+          .map((v) => Math.max(0, v).toFixed(1) + "px").join(" ");
+        rule = `${sel} { transform: translate(${dx.toFixed(1)}px, ${dy.toFixed(1)}px) scale(${scale.toFixed(4)}) !important;` +
+          ` transform-origin: 0 0 !important; clip-path: inset(${inset}) !important; }`;
         fitInfo = `${describe(stageEl)} tiles ${Math.round(cw)}×${Math.round(ch)} scaled ×${scale.toFixed(2)} via ${sel}`;
-      } else fitInfo = `${describe(stageEl)} tiles ${Math.round(cw)}×${Math.round(ch)} already fill ${Math.round(st.width)}×${Math.round(availH)}`;
+      } else fitInfo = `${describe(stageEl)} tiles ${Math.round(cw)}×${Math.round(ch)} ${hide ? "already fill" : "fit in"} ${Math.round(st.width)}×${Math.round(availH)}`;
     }
     if (!css && !rule) return false;
     if (!css) {
@@ -576,7 +598,10 @@
         font: 600 12px/1 system-ui, -apple-system, "Segoe UI", sans-serif; color: #fff; letter-spacing: 0.01em;
         background: rgba(28, 28, 30, 0.82); backdrop-filter: blur(16px) saturate(180%); -webkit-backdrop-filter: blur(16px) saturate(180%);
         box-shadow: 0 4px 16px rgba(0, 0, 0, 0.25), inset 0 0 0 0.5px rgba(255, 255, 255, 0.18);
-        transition: transform 100ms ease-out, opacity 200ms ease; user-select: none; }
+        transition: transform 100ms ease-out, opacity 200ms ease; user-select: none; cursor: grab; touch-action: none; }
+      .pill.dragging { cursor: grabbing; }
+      .grip { width: 6px; height: 14px; margin-right: -2px; flex: none; opacity: 0.45;
+        background: radial-gradient(circle, #fff 1px, transparent 1.3px) 0 0 / 3px 3.5px; }
       button { all: unset; cursor: pointer; display: flex; align-items: center; gap: 6px; height: 28px; }
       .main:active { transform: scale(0.97); }
       .dot { width: 8px; height: 8px; border-radius: 50%; background: #8e8e93; flex: none; }
@@ -591,7 +616,7 @@
       @keyframes pulse { 50% { opacity: 0.35; } }
       @media (prefers-reduced-motion: reduce) { .rec .dot { animation: none; } .main:active { transform: none; } }
       @media (prefers-reduced-transparency: reduce) { .pill { background: #1c1c1e; backdrop-filter: none; } }
-    </style><div class="pill" part="pill"><button class="main"><span class="dot"></span><span class="text"></span></button>` +
+    </style><div class="pill" part="pill" title="Drag to move · double-click to put back"><span class="grip"></span><button class="main"><span class="dot"></span><span class="text"></span></button>` +
       `<button class="cc"></button>` +
       `<button class="x" aria-label="Hide for this call" title="Hide for this call">×</button></div>`;
     const [main, cc, x] = root.querySelectorAll("button");
@@ -603,7 +628,72 @@
       else tryEnableCaptions(true);
     });
     x.addEventListener("click", () => { pillHidden = true; host.remove(); pill = null; });
-    return { host, box: root.querySelector(".pill"), main, cc, text: root.querySelector(".text") };
+    const box = root.querySelector(".pill");
+    makeDraggable(host, box, root);
+    return { host, box, main, cc, text: root.querySelector(".text") };
+  }
+
+  // The pill can be dragged anywhere on the call page. Where it was left is kept as a share of
+  // the free space (0 = left/top edge, 1 = right/bottom), so it lands in the same spot on any
+  // window or screen size, and it's always kept fully on screen. Double-click puts it back.
+  const PILL_POS = "pillPos";
+  let pillPos = null; // { x, y } in 0..1, or null for the default corner
+
+  function placePill(host) {
+    if (!pillPos) { host.style.removeProperty("left"); host.style.removeProperty("top"); host.style.removeProperty("bottom"); return; }
+    const w = host.offsetWidth, h = host.offsetHeight;
+    const clamp = (v) => Math.min(1, Math.max(0, v));
+    host.style.setProperty("left", Math.round(clamp(pillPos.x) * Math.max(0, window.innerWidth - w)) + "px", "important");
+    host.style.setProperty("top", Math.round(clamp(pillPos.y) * Math.max(0, window.innerHeight - h)) + "px", "important");
+    host.style.setProperty("bottom", "auto", "important");
+  }
+
+  function makeDraggable(host, box, root) {
+    let start = null, moved = false;
+    // Once pressed on the pill, the pointer is followed across the whole window (it soon
+    // leaves the small pill). Not captured: a press that doesn't move stays a click on its button.
+    const move = (e) => {
+      if (!start || e.pointerId !== start.id) return;
+      const dx = e.clientX - start.x, dy = e.clientY - start.y;
+      if (!moved && Math.hypot(dx, dy) < 4) return; // a click, not a drag
+      if (!moved) { moved = true; box.classList.add("dragging"); }
+      e.preventDefault();
+      const w = host.offsetWidth, h = host.offsetHeight;
+      pillPos = { x: (start.left + dx) / Math.max(1, window.innerWidth - w), y: (start.top + dy) / Math.max(1, window.innerHeight - h) };
+      placePill(host);
+    };
+    const end = (e) => {
+      if (!start || e.pointerId !== start.id) return;
+      start = null;
+      window.removeEventListener("pointermove", move, true);
+      window.removeEventListener("pointerup", end, true);
+      window.removeEventListener("pointercancel", end, true);
+      box.classList.remove("dragging");
+      if (moved) {
+        pillPos = { x: Math.min(1, Math.max(0, pillPos.x)), y: Math.min(1, Math.max(0, pillPos.y)) };
+        chrome.storage.local.set({ [PILL_POS]: pillPos });
+        setTimeout(() => { moved = false; }, 0); // after the click that ends the drag
+      }
+    };
+    box.addEventListener("pointerdown", (e) => {
+      if (e.button !== 0) return;
+      const r = host.getBoundingClientRect();
+      start = { x: e.clientX, y: e.clientY, left: r.left, top: r.top, id: e.pointerId };
+      moved = false;
+      window.addEventListener("pointermove", move, true);
+      window.addEventListener("pointerup", end, true);
+      window.addEventListener("pointercancel", end, true);
+    });
+    // Its text changes its width ("Paused", "Recording captions"…): keep it in place, on screen.
+    new ResizeObserver(() => placePill(host)).observe(box);
+    // The click that ends a drag isn't a click on the button under it.
+    root.addEventListener("click", (e) => { if (moved) { e.stopPropagation(); e.preventDefault(); } }, true);
+    box.addEventListener("dblclick", (e) => {
+      if (e.target.closest("button")) return;
+      pillPos = null;
+      chrome.storage.local.remove(PILL_POS);
+      placePill(host);
+    });
   }
 
   function renderPill(s) {
@@ -613,7 +703,7 @@
       return;
     }
     if (!pill) pill = makePill();
-    if (!pill.host.isConnected) document.documentElement.append(pill.host);
+    if (!pill.host.isConnected) { document.documentElement.append(pill.host); placePill(pill.host); }
     const [cls, text, tip] = s.paused
       ? ["warn", "Paused", "Meeting Transcripts is paused. Click to resume recording."]
       : s.captionsOn
@@ -678,7 +768,9 @@
   async function init() {
     settings = await MT.getSettings();
     selfName = (await chrome.storage.local.get(SELF_KEY))[SELF_KEY] || "";
+    pillPos = (await chrome.storage.local.get(PILL_POS))[PILL_POS] || null;
     chrome.storage.onChanged.addListener((changes) => {
+      if (changes[PILL_POS]) { pillPos = changes[PILL_POS].newValue || null; if (pill) placePill(pill.host); } // moved in another call tab
       if (!changes.settings) return;
       settings = { ...settings, ...changes.settings.newValue };
       applyHide();
@@ -702,10 +794,13 @@
     window.addEventListener("pagehide", save);
     // A new window size (resized, or moved to another screen) moves the controls: refit the
     // stage. Our own resize signal changes nothing here, so it doesn't loop.
-    // Meet re-renders its layout without touching the captions: re-check while hiding is on.
-    setInterval(() => { if (settings.hideCaptions && region) applyHide(); }, 1000);
+    // Meet re-renders its layout without touching the captions: re-check, hidden or shown.
+    setInterval(() => { if (region) applyHide(); }, 1000);
     let resizeTimer = 0;
-    window.addEventListener("resize", () => { clearTimeout(resizeTimer); resizeTimer = setTimeout(applyHide, 150); });
+    window.addEventListener("resize", () => {
+      if (pill) placePill(pill.host); // same spot, still on screen
+      clearTimeout(resizeTimer); resizeTimer = setTimeout(applyHide, 150);
+    });
     document.addEventListener("visibilitychange", () => document.hidden && save());
     const loop = () => {
       tick();
