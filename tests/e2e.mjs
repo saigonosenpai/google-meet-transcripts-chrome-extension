@@ -340,7 +340,10 @@ console.log("restored meetings:", titlesAfter.join(" | "));
     await hp.mouse.up();
     await hp.waitForTimeout(300);
     const moved = await pillRect();
-    assert.ok(Math.abs(moved.left - (700 - 6)) <= 2 && Math.abs(moved.top + moved.height / 2 - 40) <= 2, "pill follows the drag " + JSON.stringify(moved));
+    // Where the grab point was taken, unless that would put the pill past the window's edge
+    // (its width depends on the system's fonts).
+    const wantLeft = Math.min(700 - 6, 1000 - moved.width);
+    assert.ok(Math.abs(moved.left - wantLeft) <= 2 && Math.abs(moved.top + moved.height / 2 - 40) <= 2, "pill follows the drag " + JSON.stringify(moved));
     assert.equal((await sw.evaluate(() => MT.getSettings())).paused, pausedBefore, "dragging isn't a click: recording not paused");
     const saved = await sw.evaluate(() => chrome.storage.local.get("pillPos").then((d) => d.pillPos));
     assert.ok(saved && saved.x > 0 && saved.y >= 0, "position saved " + JSON.stringify(saved));
