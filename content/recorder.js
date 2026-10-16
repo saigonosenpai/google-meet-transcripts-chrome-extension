@@ -378,6 +378,19 @@
     return "[data-mt-stage]";
   }
 
+  // The part of an element that shows: Meet draws a camera's video larger than its tile and
+  // lets the tile crop it, so the video's own box reaches past the tile (and the screen).
+  function visibleRect(el, stageEl) {
+    let { left, top, right, bottom } = el.getBoundingClientRect();
+    for (let a = el.parentElement; a && a !== stageEl.parentElement; a = a.parentElement) {
+      const cs = getComputedStyle(a);
+      if (cs.overflowX === "visible" && cs.overflowY === "visible" && cs.clipPath === "none") continue;
+      const r = a.getBoundingClientRect();
+      left = Math.max(left, r.left); top = Math.max(top, r.top); right = Math.min(right, r.right); bottom = Math.min(bottom, r.bottom);
+    }
+    return { left, top, right, bottom, width: Math.max(0, right - left), height: Math.max(0, bottom - top) };
+  }
+
   // Where the shown caption panel starts: the top of the captions and the containers around
   // them that hold nothing else (the same ones hiding collapses).
   function captionTop() {
@@ -426,15 +439,19 @@
       // and not icons or avatars inside a tile.
       let l = Infinity, t = Infinity, r = -Infinity, b = -Infinity;
       for (const c of stageEl.querySelectorAll("video, [data-participant-id]")) {
-        const cr = c.getBoundingClientRect();
+        const cr = visibleRect(c, stageEl);
         if (cr.width < 80 || cr.height < 45) continue;
         if (cr.width >= st.width * 0.98 && cr.height >= st.height * 0.98) continue;
         l = Math.min(l, cr.left); t = Math.min(t, cr.top); r = Math.max(r, cr.right); b = Math.max(b, cr.bottom);
       }
       const availH = edge - margin - st.top, cw = r - l, ch = b - t;
-      const scale = cw > 0 && ch > 0 ? Math.min(availH / ch, st.width / cw) : 0;
+      const fit = cw > 0 && ch > 0 ? Math.min(availH / ch, st.width / cw) : 0;
       // Hidden, only ever enlarged; shown, only ever shrunk (when Meet's tiles run under the panel).
-      if (hide ? scale > 1.02 : scale > 0 && scale < 0.98 && b > edge + 2) {
+      // Hidden and already as wide as the stage (a row of cameras), they can't grow without
+      // stretching the video: they're centered in the space instead of left at its top.
+      const scale = hide && fit >= 0.98 ? Math.max(1, fit) : fit;
+      const centerGap = hide ? Math.abs((availH - ch * scale) / 2 - (t - st.top) * scale) : 0;
+      if (hide ? scale > 1.02 || (fit >= 0.98 && centerGap > 8) : scale > 0 && scale < 0.98 && b > edge + 2) {
         // transform-origin is the stage's top-left: a point p lands at d + scale·p.
         const dx = (st.width - cw * scale) / 2 - scale * (l - st.left);
         const dy = (availH - ch * scale) / 2 - scale * (t - st.top);
@@ -446,7 +463,7 @@
           .map((v) => Math.max(0, v).toFixed(1) + "px").join(" ");
         rule = `${sel} { transform: translate(${dx.toFixed(1)}px, ${dy.toFixed(1)}px) scale(${scale.toFixed(4)}) !important;` +
           ` transform-origin: 0 0 !important; clip-path: inset(${inset}) !important; }`;
-        fitInfo = `${describe(stageEl)} tiles ${Math.round(cw)}×${Math.round(ch)} scaled ×${scale.toFixed(2)} via ${sel}`;
+        fitInfo = `${describe(stageEl)} tiles ${Math.round(cw)}×${Math.round(ch)} ${scale > 1.02 || scale < 0.98 ? "scaled ×" + scale.toFixed(2) : "centered"} via ${sel}`;
       } else fitInfo = `${describe(stageEl)} tiles ${Math.round(cw)}×${Math.round(ch)} ${hide ? "already fill" : "fit in"} ${Math.round(st.width)}×${Math.round(availH)}`;
     }
     if (!css && !rule) return false;

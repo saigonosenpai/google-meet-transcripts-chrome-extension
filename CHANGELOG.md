@@ -3,6 +3,14 @@
 Each version here becomes a release on GitHub, with the extension zip attached, as soon as
 it's pushed to `main` with the matching `version` in `manifest.json`.
 
+## 2.6.4
+
+- **Fixed: hiding captions didn't enlarge the video when cameras were on.** Meet draws each
+  camera's video wider than its tile and crops it; only the part that shows is measured now.
+- **A row of cameras that already fills the width is centered** in the space the captions
+  leave, instead of sitting at the top with an empty band below (the video can't grow
+  without being stretched).
+
 ## 2.6.3
 
 - **Move the in-call pill.** Drag the *Recording captions* pill anywhere it's not in the
